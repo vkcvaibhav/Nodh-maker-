@@ -336,13 +336,17 @@ def create_docx(content):
                 p = doc.add_paragraph()
                 p.add_run(line_stripped).bold = True
                 p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                # Add dark background shading behind text
+                
+                # Add thin, black, dotted line under/behind the text
                 pPr = p._p.get_or_add_pPr()
-                shd = OxmlElement('w:shd')
-                shd.set(qn('w:val'), 'clear')
-                shd.set(qn('w:color'), 'auto')
-                shd.set(qn('w:fill'), 'D0D0D0')
-                pPr.append(shd)
+                pBdr = OxmlElement('w:pBdr')
+                bottom = OxmlElement('w:bottom')
+                bottom.set(qn('w:val'), 'dotted')  # Makes the line dotted
+                bottom.set(qn('w:sz'), '4')        # Size 4 = thin line (1/2 pt)
+                bottom.set(qn('w:space'), '1')     # Spacing from text
+                bottom.set(qn('w:color'), '000000')# Black color hex code
+                pBdr.append(bottom)
+                pPr.append(pBdr)
             elif line_stripped.startswith("વિષય:"):
                 flush_signatures()
                 p = doc.add_paragraph()
