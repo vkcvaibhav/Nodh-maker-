@@ -15,6 +15,8 @@ import re
 from docx import Document
 from docx.shared import Mm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 # ==========================================
 # Database Setup for Archiving
@@ -269,6 +271,39 @@ def create_docx(content):
                             run.add_break()
             sig_buffer.clear()
 
+    def build_and_format_table(data):
+        num_cols = len(data[0])
+        table = doc.add_table(rows=len(data), cols=num_cols)
+        table.style = 'Table Grid'
+        table.autofit = False
+        table.allow_autofit = False
+        
+        # Define explicit column widths (Total usable width ~153mm)
+        widths = [Mm(12), Mm(65), Mm(19), Mm(19), Mm(19), Mm(19)]
+        if num_cols == 6:
+            for col_idx in range(6):
+                table.columns[col_idx].width = widths[col_idx]
+
+        for row_idx, row_data in enumerate(data):
+            for col_idx, cell_text in enumerate(row_data):
+                cell = table.cell(row_idx, col_idx)
+                if num_cols == 6:
+                    cell.width = widths[col_idx]
+                
+                is_bold = (row_idx == 0) or ('**' in cell_text)
+                cell.text = cell_text.replace('**', '')
+                p = cell.paragraphs[0]
+                
+                # Align left for Details, Center for others
+                if col_idx == 1 and row_idx > 0:
+                    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                else:
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    
+                if is_bold:
+                    for run in p.runs: run.bold = True
+        doc.add_paragraph()
+
     for line in lines:
         line_stripped = line.strip()
         if not line_stripped: continue
@@ -276,36 +311,17 @@ def create_docx(content):
         if line_stripped.startswith('|'):
             in_table = True
             
-            # Check if this is just a markdown separator like |---|---|
             if not line_stripped.replace('|', '').replace('-', '').replace(' ', ''):
                 continue
                 
             parts = line_stripped.split('|')
             if len(parts) > 2:
-                # Use parts[1:-1] to safely preserve empty cells in the Grand Total row
                 row = [cell.strip() for cell in parts[1:-1]]
                 table_data.append(row)
         else:
             if in_table:
                 if table_data:
-                    num_cols = len(table_data[0])
-                    table = doc.add_table(rows=len(table_data), cols=num_cols)
-                    table.style = 'Table Grid'
-                    for row_idx, row_data in enumerate(table_data):
-                        for col_idx, cell_text in enumerate(row_data):
-                            cell = table.cell(row_idx, col_idx)
-                            
-                            # Detect ** for bolding (like the Grand Total Row)
-                            is_bold = (row_idx == 0) or ('**' in cell_text)
-                            
-                            cell.text = cell_text.replace('**', '')
-                            p = cell.paragraphs[0]
-                            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                            
-                            if is_bold:
-                                for run in p.runs: run.bold = True
-                                
-                    doc.add_paragraph()
+                    build_and_format_table(table_data)
                 table_data = []
                 in_table = False
 
@@ -313,15 +329,25 @@ def create_docx(content):
                 flush_signatures()
                 p = doc.add_paragraph(line_stripped)
                 p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                # Reduce space between date and location
+                p.paragraph_format.space_after = Pt(0) 
             elif "સાદર નોંધ" in line_stripped:
                 flush_signatures()
                 p = doc.add_paragraph()
                 p.add_run(line_stripped).bold = True
                 p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                # Add dark background shading behind text
+                pPr = p._p.get_or_add_pPr()
+                shd = OxmlElement('w:shd')
+                shd.set(qn('w:val'), 'clear')
+                shd.set(qn('w:color'), 'auto')
+                shd.set(qn('w:fill'), 'D0D0D0')
+                pPr.append(shd)
             elif line_stripped.startswith("વિષય:"):
                 flush_signatures()
                 p = doc.add_paragraph()
                 p.add_run(line_stripped).bold = True
+                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             elif any(role in line_stripped for role in ["અધિકારી", "ઈન્ચાર્જ", "પ્રાધ્યાપક", "વડા"]) and not any(r in line_stripped for r in ["આચાર્ય", "ડીનશ્રી"]):
                 sig_buffer.append(line_stripped)
             elif any(role in line_stripped for role in ["આચાર્ય", "ડીનશ્રી", "મહાવિધાયલય", "ન.કૃ.યુ"]):
@@ -339,24 +365,14 @@ def create_docx(content):
                 p.add_run(formatted_line)
             else:
                 flush_signatures()
-                doc.add_paragraph(line_stripped)
+                p = doc.add_paragraph(line_stripped)
+                # Ensure all Gujarati paragraphs are fully justified
+                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY 
 
     flush_signatures()
     
     if in_table and table_data:
-        num_cols = len(table_data[0])
-        table = doc.add_table(rows=len(table_data), cols=num_cols)
-        table.style = 'Table Grid'
-        for row_idx, row_data in enumerate(table_data):
-            for col_idx, cell_text in enumerate(row_data):
-                cell = table.cell(row_idx, col_idx)
-                
-                is_bold = (row_idx == 0) or ('**' in cell_text)
-                cell.text = cell_text.replace('**', '')
-                p = cell.paragraphs[0]
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                if is_bold:
-                    for run in p.runs: run.bold = True
+        build_and_format_table(table_data)
 
     bio = io.BytesIO()
     doc.save(bio)
@@ -437,8 +453,7 @@ with tab1:
                     આચાર્ય અને ડીનશ્રી, ન. મ. કૃષિ મહાવિધાયલય, ન.કૃ.યુ. નવસારી
                     
                     ==== AI STATUTE ANALYSIS ====
-                    1. **Original Statute 121 Details:** 
-                       - **Item Number Used:** [State the specific rule number you used].
+                    1. **Original Statute 121 Details:** - **Item Number Used:** [State the specific rule number you used].
                        - **Original Statute Text:** [Provide the EXACT quote/sentence directly from the attached Statute 121 PDF for this specific rule number].
                     2. **Justification:** [Explain exactly WHY this specific statute applies to the requested purchase. Relate the items being bought to the statute's wording].
                     3. **Similar Precedent from Sample Nondh:** [Find a similar past purchase in the uploaded 'Sample Nondh' context. List its Subject, Date, and the Statute Item Number it used to prove your choice is historically accurate].
@@ -502,7 +517,7 @@ with tab1:
                 st.success(f"**Grand Total (કુલ રકમ): ₹ {grand_total_calc:,.2f}**")
                 
                 # Automatically sync the paragraph text with the accurate Grand Total
-                edit_pre = re.sub(r'(અંદાજિત ખર્ચ\s*).*?(\s*થનાર)', f'\\g<1>{grand_total_calc:,.2f}\\g<2>', edit_pre)
+                edit_pre = re.sub(r'(અંદાજિત ખર્ચ\s*).*?(\s*થનાર)', f'\g<1>{grand_total_calc:,.2f}\g<2>', edit_pre)
         else:
             edited_df = pd.DataFrame()
             st.info("આ નોંધમાં ટેબલની જરૂરિયાત જણાઈ નથી. (No table required for this note based on the context).")
