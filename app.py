@@ -242,8 +242,17 @@ def create_docx(content):
     
     style = doc.styles['Normal']
     font = style.font
-    font.name = 'Shruti'
+    # Set the primary ASCII (English) font
+    font.name = 'Times New Roman'
     font.size = Pt(11)
+    
+    # Configure the Complex Script (CS) font specifically for Gujarati
+    # This ensures Word doesn't force Times New Roman on Gujarati characters
+    rFonts = OxmlElement('w:rFonts')
+    rFonts.set(qn('w:ascii'), 'Times New Roman')
+    rFonts.set(qn('w:hAnsi'), 'Times New Roman')
+    rFonts.set(qn('w:cs'), 'Shruti') # Ensure Shruti handles the Gujarati script
+    font._element.append(rFonts)
 
     lines = content.split('\n')
     table_data = []
