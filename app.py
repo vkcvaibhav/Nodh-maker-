@@ -568,47 +568,76 @@ with tab1:
                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
 with tab2:
-    st.markdown("### જુની નોંધ શોધો (Search Archives & History)")
+    st.markdown("### 🗄️ જૂના રેકોર્ડ શોધો (Archive Search)")
     
-    search_keyword = st.text_input("શબ્દ દ્વારા શોધો (Search by Keyword - e.g. Pesticide, ડીઝલ, Chemical):", "")
-    
-    current_year = datetime.date.today().year
-    years = ["All"] + [str(y) for y in range(current_year-3, current_year+3)]
-    months = ["All", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
-    
-    col_y, col_m = st.columns(2)
-    # If they are searching a keyword, default to 'All' years so they find it. Otherwise default to current year.
-    with col_y: sel_year = st.selectbox("વર્ષ (Year):", years, index=0 if search_keyword else 4)
-    with col_m: sel_month = st.selectbox("મહિનો (Month):", months)
+    # --- 1. THE SEARCH BAR ---
+    search_query = st.text_input("🔍 Smart Search (Type in English or Gujarati)")
+
+    # Combine both lists (from your database and word docs)
+    all_records = db_records + sample_records
+
+    # --- 2. THE GEMINI LOGIC ---
+    def smart_search_gemini(query, records):
+        if not query.strip():
+            return records
         
-    if st.button("શોધો (Search)"):
-        with st.spinner("શોધખોળ ચાલુ છે (Searching records)..."):
-            # 1. Fetch from Database
-            db_records = get_archives(sel_month, sel_year, search_keyword)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        records_context = ""
+        for i, (date, subject, content) in enumerate(records):
+            records_context += f"ID: {i} | Subject: {subject} | Content: {content[:150]}...\n"
             
-            # 2. Fetch directly from Sample Nondh DOCX
-            sample_records = search_sample_nondh(search_keyword, sel_month, sel_year)
+        prompt = f"""
+        You are an intelligent, cross-lingual search engine assistant. 
+        The user is searching for: "{query}" (This may be in English, but the records are mostly in Gujarati).
+        
+        Task: Find the records that semantically match the user's intent. Understand the context across both languages (e.g., if the user searches "approval for snacks", match it with "ચા-નાસ્તો મંજુરી", or "seeds" with "બિયારણ").
+        
+        Available Records:
+        {records_context}
+        
+        Respond ONLY with a comma-separated list of the matching IDs (e.g., 0, 3, 4). If no records match, return NONE.
+        """
+        
+        try:
+            response = model.generate_content(prompt)
+            result = response.text.strip()
             
-            # Combine both lists
-            all_records = db_records + sample_records
+            if result == "NONE" or not result:
+                return []
+                
+            matched_ids = [int(x.strip()) for x in result.split(",") if x.strip().isdigit()]
+            return [records[i] for i in matched_ids if i < len(records)]
             
-            if all_records:
-                st.success(f"કુલ {len(all_records)} રેકોર્ડ મળ્યા. (ડેટાબેઝ: {len(db_records)} | જૂના રેકોર્ડ [Word Doc]: {len(sample_records)})")
-                for idx, record in enumerate(all_records):
-                    date, subject, content = record
-                    with st.expander(f"{date} - {subject}"):
-                        arc_col1, arc_col2 = st.columns([2, 8])
-                        with arc_col2:
-                            st.markdown(content)
-                        
-                        archived_docx = create_docx(content)
-                        st.download_button(label="Download (Word)",
-                                           data=archived_docx,
-                                           file_name=f"Archive_{date.replace('/', '_')}.docx",
-                                           mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                           key=f"dl_{idx}")
-            else:
-                st.info("કોઈ રેકોર્ડ મળેલ નથી (No records found).")
+        except Exception as e:
+            st.error(f"Search error: {e}")
+            return records
+
+    # --- 3. FILTERING ---
+    if search_query:
+        with st.spinner("માહિતી શોધાઈ રહી છે... (Searching semantically...)"):
+            display_records = smart_search_gemini(search_query, all_records)
+    else:
+        display_records = all_records
+
+    # --- 4. DISPLAYING THE RESULTS ---
+    if display_records:
+        st.success(f"કુલ {len(display_records)} રેકોર્ડ મળ્યા.")
+        for idx, record in enumerate(display_records):
+            date, subject, content = record
+            with st.expander(f"{date} - {subject}"):
+                arc_col1, arc_col2 = st.columns([2, 8])
+                with arc_col2:
+                    st.markdown(content)
+                
+                archived_docx = create_docx(content)
+                st.download_button(label="Download (Word)",
+                                   data=archived_docx,
+                                   file_name=f"Archive_{date.replace('/', '_')}.docx",
+                                   mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                   key=f"dl_smart_{idx}") 
+    else:
+        st.info("કોઈ રેકોર્ડ મળેલ નથી (No matching records found).")
 
 with tab3:
     st.markdown("### ડેટા સિંક (GitHub Data Sync)")
