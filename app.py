@@ -624,16 +624,27 @@ with tab2:
     if display_records:
         st.success(f"કુલ {len(display_records)} રેકોર્ડ મળ્યા.")
         for idx, record in enumerate(display_records):
-            date, subject, content = record
+            
+            # --- THE FIX: Handle both 3-item (Database) and 2-item (GitHub) records ---
+            if len(record) == 3:
+                date, subject, content = record
+            elif len(record) == 2:
+                subject, content = record
+                date = "જૂનો રેકોર્ડ (GitHub)" # Default date for Word docs
+            else:
+                date, subject, content = "N/A", "Unknown", str(record)
+            # --------------------------------------------------------------------------
+
             with st.expander(f"{date} - {subject}"):
                 arc_col1, arc_col2 = st.columns([2, 8])
                 with arc_col2:
                     st.markdown(content)
                 
+                # We also removed the '/' replace logic from the filename to prevent errors with GitHub files
                 archived_docx = create_docx(content)
                 st.download_button(label="Download (Word)",
                                    data=archived_docx,
-                                   file_name=f"Archive_{date.replace('/', '_')}.docx",
+                                   file_name=f"Archive_Doc_{idx}.docx",
                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                    key=f"dl_smart_{idx}") 
     else:
