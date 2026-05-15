@@ -79,8 +79,10 @@ def load_permanent_context():
     statute_text = "Statute 121 Rules:\n"
     sample_text = "Sample Nondh Format:\n"
     
+    # CORRECTED URLs BELOW:
+    # Notice how we replaced the "-" with "Nodh-maker"
     pdf_url = "https://raw.githubusercontent.com/vkcvaibhav/Nodh-maker/main/121_Statutes.pdf"
-    docx_url = "https://raw.githubusercontent.com/vkcvaibhav/Nodh-maker/main/sample_nondh.docxx"
+    docx_url = "https://raw.githubusercontent.com/vkcvaibhav/Nodh-maker/main/sample_nondh.docx"
     
     try:
         r_pdf = requests.get(pdf_url)
@@ -89,8 +91,10 @@ def load_permanent_context():
             reader = PyPDF2.PdfReader(f)
             for page in reader.pages:
                 statute_text += page.extract_text() + "\n"
+        else:
+            st.error(f"Failed to load PDF. Status code: {r_pdf.status_code}")
     except Exception as e:
-        pass
+        st.error(f"Error reading PDF: {e}")
 
     try:
         r_docx = requests.get(docx_url)
@@ -99,8 +103,10 @@ def load_permanent_context():
             doc = DocxReader(f)
             for para in doc.paragraphs:
                 sample_text += para.text + "\n"
+        else:
+             st.error(f"Failed to load DOCX. Status code: {r_docx.status_code}")
     except Exception as e:
-        pass
+        st.error(f"Error reading DOCX: {e}")
             
     return statute_text, sample_text
 
