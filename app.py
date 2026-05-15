@@ -573,8 +573,8 @@ with tab2:
     # --- 1. THE SEARCH BAR ---
     search_query = st.text_input("🔍 Smart Search (Type in English or Gujarati)")
 
-    # Combine both lists (from your database and word docs)
-    all_records = db_records + sample_nondh
+    # Combin# Combine both lists
+            all_records = db_records + sample_records
 
     # --- 2. THE GEMINI LOGIC ---
     def smart_search_gemini(query, records):
