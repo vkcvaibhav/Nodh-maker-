@@ -79,8 +79,7 @@ def load_permanent_context():
     statute_text = "Statute 121 Rules:\n"
     sample_text = "Sample Nondh Format:\n"
     
-    # CORRECTED URLs BELOW:
-    # Notice how we replaced the "-" with "Nodh-maker"
+    # CORRECT URLs (No /-/ in the middle)
     pdf_url = "https://raw.githubusercontent.com/vkcvaibhav/Nodh-maker/main/121_Statutes.pdf"
     docx_url = "https://raw.githubusercontent.com/vkcvaibhav/Nodh-maker/main/sample_nondh.docx"
     
