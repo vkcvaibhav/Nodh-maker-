@@ -660,11 +660,12 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     p_v2.paragraph_format.space_after = Pt(0)
     
     set_cell_border(cell_right, top={"sz": 12, "val": "single", "color": "000000"}, bottom={"sz": 12, "val": "single", "color": "000000"}, left={"sz": 12, "val": "single", "color": "000000"}, right={"sz": 12, "val": "single", "color": "000000"})
-    doc.add_paragraph() # Spacer
-    
+        
     # Center Heading 1
     p_col = doc.add_paragraph()
     p_col.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_col.paragraph_format.space_before = Pt(0) 
+    p_col.paragraph_format.space_after = Pt(0)
     run_col = p_col.add_run("N. M. COLLEGE OF AGRICULTURE")
     run_col.bold = True
     run_col.font.size = Pt(22) # <--- Font size for College Name
