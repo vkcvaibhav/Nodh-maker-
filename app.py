@@ -584,7 +584,16 @@ with tab2:
         model = genai.GenerativeModel('gemini-1.5-flash')
         
         records_context = ""
-        for i, (date, subject, content) in enumerate(records):
+        for i, record in enumerate(records):
+            # --- THE FIX: Handle unpacking safely for Gemini context ---
+            if len(record) == 3:
+                date, subject, content = record
+            elif len(record) == 2:
+                subject, content = record
+            else:
+                continue # Skip any weirdly formatted records
+            
+            # Now we safely add it to the prompt string
             records_context += f"ID: {i} | Subject: {subject} | Content: {content[:150]}...\n"
             
         prompt = f"""
@@ -612,7 +621,6 @@ with tab2:
         except Exception as e:
             st.error(f"Search error: {e}")
             return records
-
     # --- 3. FILTERING ---
     if search_query:
         with st.spinner("માહિતી શોધાઈ રહી છે... (Searching semantically...)"):
