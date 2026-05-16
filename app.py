@@ -825,27 +825,83 @@ with tab4:
             po_options.append(label)
             po_dict[label] = po
             
-        selected_po_label = st.selectbox("પેમેન્ટ માટે ઓર્ડર પસંદ કરો (Select Pending PO):", po_options)
-        
         if selected_po_label:
             po_id, v_name, o_no, p_date, amt = po_dict[selected_po_label]
             
+            # --- NEW: Reset Session State when switching between different POs ---
+            if st.session_state.get("current_po_id") != po_id:
+                st.session_state.current_po_id = po_id
+                st.session_state.ext_bill_no = "INV-"
+                st.session_state.ext_amt = float(amt)
+                st.session_state.ext_words = ""
+                st.session_state.last_invoice = None
+            # ---------------------------------------------------------------------
+
             st.markdown("#### ઇન્વોઇસ અને બજેટની વિગતો (Invoice Details)")
             
             col_b1, col_b2 = st.columns(2)
             with col_b1:
                 budget_head = st.text_input("Budget Head No.", value="303/2092 (AINP on Agril Acarology)")
-                bill_no = st.text_input("ઇન્વોઇસ/બિલ નંબર (Vendor Bill No.)", value=f"INV-")
+                
+                # CHANGED: Connected to Session State
+                bill_no = st.text_input("ઇન્વોઇસ/બિલ નંબર (Vendor Bill No.)", value=st.session_state.ext_bill_no)
+                
                 invoice_upload = st.file_uploader("પાર્ટીનું બિલ અપલોડ કરો (Upload Vendor Invoice PDF/Img)", type=["pdf", "jpg", "png"])
+                
                 if invoice_upload:
                     os.makedirs("vendor_invoices", exist_ok=True)
-                    with open(os.path.join("vendor_invoices", invoice_upload.name), "wb") as f: f.write(invoice_upload.getbuffer())
+                    with open(os.path.join("vendor_invoices", invoice_upload.name), "wb") as f: 
+                        f.write(invoice_upload.getbuffer())
                     st.success("ઇન્વોઇસ સેવ થઈ ગયું!")
+
+                    # --- NEW: AI Auto-Extraction Logic ---
+                    if invoice_upload.name != st.session_state.last_invoice and api_key:
+                        with st.spinner("AI દ્વારા બિલની વિગતો વાંચવામાં આવી રહી છે... (Extracting...)"):
+                            try:
+                                import json
+                                genai.configure(api_key=api_key)
+                                model = genai.GenerativeModel('gemini-1.5-flash') 
+                                
+                                prompt = """
+                                Extract the following from this invoice:
+                                1. Invoice/Bill Number
+                                2. Grand Total Amount (as a pure number)
+                                3. Grand Total Amount in English words (e.g. "Four Thousand Two Hundred Forty Eight")
+                                Return ONLY a valid JSON object in this exact format:
+                                {"bill_no": "INV-123", "amount": 1234.50, "amount_words": "One Thousand..."}
+                                """
+                                
+                                # Read PDF text or Pass Image directly
+                                if invoice_upload.type == "application/pdf":
+                                    reader = PyPDF2.PdfReader(invoice_upload)
+                                    text = "".join([page.extract_text() for page in reader.pages])
+                                    response = model.generate_content([prompt, text])
+                                else:
+                                    img = Image.open(invoice_upload)
+                                    response = model.generate_content([prompt, img])
+                                
+                                # Parse the JSON response securely
+                                res_text = response.text.strip().replace("```json", "").replace("```", "")
+                                data = json.loads(res_text)
+                                
+                                # Update Session State
+                                st.session_state.ext_bill_no = str(data.get("bill_no", "INV-"))
+                                st.session_state.ext_amt = float(data.get("amount", amt))
+                                st.session_state.ext_words = str(data.get("amount_words", ""))
+                                st.session_state.last_invoice = invoice_upload.name
+                                
+                                st.rerun() # Refresh the UI with new values
+                                
+                            except Exception as e:
+                                st.warning(f"આપમેળે વિગત મેળવવામાં ભૂલ: {e}. કૃપા કરીને જાતે ભરો.")
+                    # -------------------------------------
 
             with col_b2:
                 bill_date = st.date_input("ઇન્વોઇસની તારીખ (Bill Date)", value=datetime.date.today())
-                final_amt = st.number_input("ચૂકવવા પાત્ર રકમ (Amount to Pay)", value=float(amt))
-                amount_words = st.text_input("રકમ શબ્દોમાં (Amount in Words - English)", placeholder="e.g., Four Thousand Two Hundred Forty Eight")
+                
+                # CHANGED: Connected to Session State
+                final_amt = st.number_input("ચૂકવવા પાત્ર રકમ (Amount to Pay)", value=st.session_state.ext_amt)
+                amount_words = st.text_input("રકમ શબ્દોમાં (Amount in Words - English)", value=st.session_state.ext_words, placeholder="e.g., Four Thousand Two Hundred Forty Eight")
             
             st.markdown("---")
             col_btn1, col_btn2, col_btn3 = st.columns(3)
