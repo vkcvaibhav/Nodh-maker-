@@ -400,73 +400,95 @@ from docx.oxml.ns import qn
 def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_items):
     doc = Document()
     
-    # Set margins and orientation (Portrait for Letter)
-    sections = doc.sections
-    for section in sections:
-        section.page_width = Mm(210)
-        section.page_height = Mm(297)
-        section.left_margin = Inches(0.75)
-        section.right_margin = Inches(0.75)
-        section.top_margin = Inches(0.5)
+    doc = Document()
+    for section in doc.sections:
+        section.top_margin = Inches(0.4)
         section.bottom_margin = Inches(0.5)
+        section.left_margin = Inches(0.8)
+        section.right_margin = Inches(0.8)
         
     style = doc.styles['Normal']
-    font = style.font
-    font.name = 'Times New Roman'
-    font.size = Pt(11)
+    style.font.size = Pt(12)
+    style.paragraph_format.space_after = Pt(0)
+    style.paragraph_format.space_before = Pt(0)
+        
+    table = doc.add_table(rows=1, cols=3)
+    table.autofit = False
+    table.columns[0].width = Inches(1.8)
+    table.columns[1].width = Inches(3.6)
+    table.columns[2].width = Inches(1.4)
     
-    # Configure Gujarati Font Support
-    rFonts = OxmlElement('w:rFonts')
-    rFonts.set(qn('w:ascii'), 'Times New Roman')
-    rFonts.set(qn('w:hAnsi'), 'Times New Roman')
-    rFonts.set(qn('w:cs'), 'Shruti')
-    font._element.append(rFonts)
-
-    # --- LETTERHEAD ---
-    # Attempt to add logo if it exists in the github structure
-    logo_path = os.path.join("logos", "nau_logo.png")
-    if os.path.exists(logo_path):
-        p_logo = doc.add_paragraph()
-        p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_logo.add_run().add_picture(logo_path, width=Inches(1.0))
-
-    p_header = doc.add_paragraph()
-    p_header.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_header = p_header.add_run("NAVSARI AGRICULTURAL UNIVERSITY\n")
-    run_header.bold = True
-    run_header.font.size = Pt(14)
+    if 'NAU_LOGO' in globals() and NAU_LOGO and os.path.exists(NAU_LOGO):
+        cell_left = table.cell(0, 0)
+        cell_left.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+        p_left = cell_left.paragraphs[0]
+        p_left.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r_left = p_left.add_run()
+        r_left.add_picture(NAU_LOGO, width=Inches(1.8))
+        
+    p_center = table.cell(0, 1).paragraphs[0]
+    p_center.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_center.paragraph_format.line_spacing = 0.85
+    r1 = p_center.add_run("કીટકશાસ્ત્ર વિભાગ\n")
+    r1.bold = True
+    r1.font.size = Pt(22)
+    r2 = p_center.add_run("ન. મ. કૃષિ મહાવિદ્યાલય\nનવસારી કૃષિ યુનિવર્સિટી\nનવસારી- ૩૯૬ ૪૫૦ (ગુજરાત)")
+    r2.bold = True
+    r2.font.size = Pt(14)
     
-    # Add Department Info Header
-    dept_info = (
-        "ડૉ. જે. જે. પસ્તાગિયા\n"
-        "પ્રાધ્યાપક અને વડા (ઈ/ચા.)\n"
-        "કીટકશાસ્ત્ર વિભાગ\n"
-        "ન. મ. કૃષિ મહાવિદ્યાલય\n"
-        "નવસારી કૃષિ યુનિવર્સિટી\n"
-        "નવસારી- ૩૯૬ ૪૫૦ (ગુજરાત)"
-    )
-    p_dept = doc.add_paragraph(dept_info)
-    p_dept.alignment = WD_ALIGN_PARAGRAPH.LEFT
-
-    doc.add_paragraph("_" * 65) # Separator line
-
-    # --- META INFO (Outward No & Date) ---
-    meta_table = doc.add_table(rows=1, cols=2)
-    meta_table.columns[0].width = Inches(4.0)
-    meta_table.columns[1].width = Inches(2.5)
+    if 'ICAR_LOGO' in globals() and ICAR_LOGO and os.path.exists(ICAR_LOGO):
+        p_right = table.cell(0, 2).paragraphs[0]
+        p_right.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r_right = p_right.add_run()
+        r_right.add_picture(ICAR_LOGO, width=Inches(1.5))
+        
+    p_thick1 = doc.add_paragraph()
+    p_thick1.paragraph_format.space_before = Pt(0)
+    p_thick1.paragraph_format.space_after = Pt(0)
+    p_thick1.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+    p_thick1.paragraph_format.line_spacing = Pt(1)
+    p_thick1.add_run().font.size = Pt(1) 
+    add_bottom_border(p_thick1, size='24')
     
-    cell_left = meta_table.cell(0, 0)
-    cell_left.text = f"જા.નં. એસીએન/એન્ટો/ {out_no} /૨૦૨૬, નવસારી"
+    table2 = doc.add_table(rows=1, cols=2)
+    table2.autofit = False
+    table2.columns[0].width = Inches(3.4)
+    table2.columns[1].width = Inches(3.4)
+
+    p1 = table2.cell(0,0).paragraphs[0]
+    p1.add_run("ડૉ. સચિન ડી. પટેલ\nપ્રાધ્યાપક અને વડા")
+    p2 = table2.cell(0,1).paragraphs[0]
+    p2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p2.add_run("મોબાઇલ: +૯૧ ૯૪૨૭૮ ૬૭૯૨૫\nઇમેલ: headentonau@gmail.com")
     
-    cell_right = meta_table.cell(0, 1)
-    p_right = cell_right.paragraphs[0]
-    p_right.text = f"તારીખ: {po_date}"
-    p_right.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-
-    doc.add_paragraph() # Spacing
-
-    # --- TO ADDRESS ---
-    doc.add_paragraph("પ્રતિ,").runs[0].bold = True
+    for cell in table2.rows[0].cells:
+        for p in cell.paragraphs:
+            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.line_spacing = 0.8
+            
+    p_thick2 = doc.add_paragraph()
+    p_thick2.paragraph_format.space_before = Pt(0)
+    p_thick2.paragraph_format.space_after = Pt(0)
+    p_thick2.paragraph_format.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+    p_thick2.paragraph_format.line_spacing = Pt(1)
+    p_thick2.add_run().font.size = Pt(1) 
+    add_bottom_border(p_thick2, size='24')
+    
+    # Dynamically grab the year from the date for the ref no
+    letter_year = letter_date.split('/')[-1] if '/' in letter_date else "૨૦૨૬"
+    
+    table3 = doc.add_table(rows=1, cols=2)
+    p_ref = table3.cell(0,0).paragraphs[0]
+    p_ref.add_run(f"જા.નં. એસીએન/એન્ટો/એઆઈએનપી-એએ/{ref_no}/{letter_year}, નવસારી")
+    p_date = table3.cell(0,1).paragraphs[0]
+    p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_date.add_run(f"તારીખ: {letter_date}")
+            
+    doc.add_paragraph().paragraph_format.space_after = Pt(6)
+    
+    p_to = doc.add_paragraph()
+    p_to.add_run("પ્રતિ,\n").bold = True
     doc.add_paragraph(vendor_name).runs[0].bold = True
     doc.add_paragraph(vendor_address)
     
