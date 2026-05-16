@@ -647,22 +647,21 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     
     # Voucher No. Line
     p_v1 = cell_right.paragraphs[0]
-    run_v1 = p_v1.add_run("Voucher No. ........................")
-    run_v1.font.size = Pt(11) 
+    run_v1 = p_v1.add_run("Voucher No:-....................")
+    run_v1.font.size = Pt(15) 
     p_v1.paragraph_format.space_before = Pt(6) # <--- Adds space above Voucher No.
     p_v1.paragraph_format.space_after = Pt(8)  # <--- Adds space between Voucher and Date
     
     # Date Line
     p_v2 = cell_right.add_paragraph()
-    run_v2 = p_v2.add_run("Date....................................")
-    run_v2.font.size = Pt(11) 
+    run_v2 = p_v2.add_run("Date:-....................")
+    run_v2.font.size = Pt(15) 
     p_v2.paragraph_format.space_after = Pt(0)
     
     set_cell_border(cell_right, top={"sz": 12, "val": "single", "color": "000000"}, bottom={"sz": 12, "val": "single", "color": "000000"}, left={"sz": 12, "val": "single", "color": "000000"}, right={"sz": 12, "val": "single", "color": "000000"})
     doc.add_paragraph() # Spacer
     
     # Center Heading 1
-    p_col = doc.add_paragraph()
     p_col.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_col = p_col.add_run("N. M. COLLEGE OF AGRICULTURE")
     run_col.bold = True
