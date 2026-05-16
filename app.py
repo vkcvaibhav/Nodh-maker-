@@ -17,6 +17,14 @@ from docx.shared import Mm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+import os
+from docx.shared import Inches, Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_ALIGN_VERTICAL
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.enum.section import WD_ORIENTATION
+from docx.oxml.shared import OxmlElement
+from docx.oxml.ns import qn
 
 # ==========================================
 # Database Setup for Archiving
@@ -390,12 +398,6 @@ def create_docx(content):
     bio = io.BytesIO()
     doc.save(bio)
     return bio.getvalue()
-import os
-from docx.shared import Inches, Pt, Mm
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_ALIGN_VERTICAL
-from docx.oxml.shared import OxmlElement
-from docx.oxml.ns import qn
 
 def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_items):
     doc = Document()
