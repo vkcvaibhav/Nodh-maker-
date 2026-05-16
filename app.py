@@ -852,40 +852,81 @@ with tab2:
     else:
         st.info("કોઈ રેકોર્ડ મળેલ નથી (No matching records found).")
 
+
 with tab3:
     st.markdown("### 📝 ખરીદી હુકમ બનાવો (Generate Purchase Order)")
     st.info("નોંધ મંજૂર થયા પછી સપ્લાયરને ખરીદીનો ઓર્ડર મોકલવા માટે અહીં વિગતો ભરો.")
     
-    col_po1, col_po2 = st.columns(2)
+    # --- 1. SELECT APPROVED NONDH ---
+    st.markdown("#### ૧. મંજૂર થયેલ નોંધ પસંદ કરો (Select Approved Nondh)")
     
+    # Fetch from database
+    db_records = get_archives("All", "All")
+    options = ["-- જાતે માહિતી ભરો (Manual Entry) --"]
+    record_dict = {}
+    
+    for idx, row in enumerate(db_records):
+        if len(row) == 3:
+            date, subject, content = row
+            label = f"[{idx+1}] {date} - {subject}"
+            record_dict[label] = content
+            options.append(label)
+            
+    selected_nondh = st.selectbox("અગાઉ સેવ કરેલ નોંધ પસંદ કરો:", options)
+    
+    # Upload physically signed PDF for archiving
+    uploaded_approved = st.file_uploader("મંજૂર થયેલ સહીવાળી નોંધ અપલોડ કરો (Upload Signed Nondh PDF/Image) - Optional", type=["pdf", "jpg", "jpeg", "png"])
+    if uploaded_approved:
+        # Save physical file to local directory
+        os.makedirs("approved_records", exist_ok=True)
+        file_path = os.path.join("approved_records", uploaded_approved.name)
+        with open(file_path, "wb") as f:
+            f.write(uploaded_approved.getbuffer())
+        st.success(f"મંજૂર થયેલ ફાઈલ સેવ થઈ ગઈ છે: {file_path}")
+
+    st.markdown("---")
+    
+    # --- 2. ENTER PO DETAILS ---
+    st.markdown("#### ૨. સપ્લાયર અને ઓર્ડરની વિગત (Supplier & Order Details)")
+    
+    col_po1, col_po2 = st.columns(2)
     with col_po1:
         vendor_name = st.text_input("સપ્લાયરનું નામ (Vendor Name)", value="DUTT ENTERPRISE")
         outward_no = st.text_input("જાવક નંબર (Outward No.)", value="139")
-    
     with col_po2:
         vendor_address = st.text_area("સપ્લાયરનું સરનામું (Vendor Address)", value="A/5, Krishna complex, borsad chokadi,\nAnand sojitra road, Anand 388 001", height=110)
         po_date = st.date_input("તારીખ (Date)", value=datetime.date.today())
         
     st.markdown("#### ખરીદીની વસ્તુઓ (Items to Purchase)")
     
-    # Try to load the dataframe from Tab 1 if it exists so the user doesn't have to re-type
+    # Base Dataframe
     default_df = pd.DataFrame(columns=["Details", "Required Quantity", "Available Pkt/Unit", "Unit/Pkt Price", "Total Price"])
     
-    if 'generated_nondh' in st.session_state:
+    # If a Nondh is selected from DB, extract its items automatically
+    if selected_nondh != "-- જાતે માહિતી ભરો (Manual Entry) --":
+        content = record_dict[selected_nondh]
+        _, session_df, _ = parse_markdown_to_parts(content)
+        if not session_df.empty:
+            default_df = session_df
+            st.success("પસંદ કરેલ નોંધમાંથી વસ્તુઓ આપમેળે લેવામાં આવી છે! (Items imported from Database)")
+        else:
+            st.warning("આ નોંધમાં કોઈ ટેબલ મળ્યું નથી. (No items found in selected Nondh).")
+            
+    # Fallback to Tab 1 if nothing is selected from DB
+    elif 'generated_nondh' in st.session_state:
         _, session_df, _ = parse_markdown_to_parts(st.session_state['generated_nondh'])
         if not session_df.empty:
             default_df = session_df
-            st.success("Tab 1 માંથી વસ્તુઓ આપમેળે લેવામાં આવી છે! (Items imported from Tab 1)")
+            st.info("Tab 1 માંથી તાજેતરની વસ્તુઓ લેવામાં આવી છે. (Items imported from Tab 1)")
             
     po_df = st.data_editor(default_df, num_rows="dynamic", use_container_width=True, key="po_editor")
     
+    # --- 3. GENERATE PO ---
     if st.button("📄 ખરીદી હુકમ ડાઉનલોડ કરો (Download PO)"):
         if vendor_name and not po_df.empty:
             try:
-                # Format the date nicely for the letter
                 formatted_date = po_date.strftime("%d.%m.%Y")
                 
-                # Generate Document
                 po_docx = create_purchase_order_docx(
                     vendor_name=vendor_name,
                     vendor_address=vendor_address,
