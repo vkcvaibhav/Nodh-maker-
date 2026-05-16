@@ -585,15 +585,15 @@ with tab2:
         
         records_context = ""
         for i, record in enumerate(records):
-            # --- THE FIX: Handle unpacking safely for Gemini context ---
+            
+            # --- SAFE UNPACKING FOR GEMINI ---
             if len(record) == 3:
                 date, subject, content = record
             elif len(record) == 2:
                 subject, content = record
             else:
-                continue # Skip any weirdly formatted records
+                continue # Skip weird formatting
             
-            # Now we safely add it to the prompt string
             records_context += f"ID: {i} | Subject: {subject} | Content: {content[:150]}...\n"
             
         prompt = f"""
@@ -621,12 +621,42 @@ with tab2:
         except Exception as e:
             st.error(f"Search error: {e}")
             return records
+
     # --- 3. FILTERING ---
     if search_query:
         with st.spinner("માહિતી શોધાઈ રહી છે... (Searching semantically...)"):
             display_records = smart_search_gemini(search_query, all_records)
     else:
         display_records = all_records
+
+    # --- 4. DISPLAYING THE RESULTS ---
+    if display_records:
+        st.success(f"કુલ {len(display_records)} રેકોર્ડ મળ્યા.")
+        for idx, record in enumerate(display_records):
+            
+            # --- SAFE UNPACKING FOR DISPLAY ---
+            if len(record) == 3:
+                date, subject, content = record
+            elif len(record) == 2:
+                subject, content = record
+                date = "જૂનો રેકોર્ડ (GitHub)" # Default date for Word docs
+            else:
+                date, subject, content = "N/A", "Unknown", str(record)
+            # ----------------------------------
+
+            with st.expander(f"{date} - {subject}"):
+                arc_col1, arc_col2 = st.columns([2, 8])
+                with arc_col2:
+                    st.markdown(content)
+                
+                archived_docx = create_docx(content)
+                st.download_button(label="Download (Word)",
+                                   data=archived_docx,
+                                   file_name=f"Archive_Doc_{idx}.docx",
+                                   mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                   key=f"dl_smart_{idx}") 
+    else:
+        st.info("કોઈ રેકોર્ડ મળેલ નથી (No matching records found).")
 
     # --- 4. DISPLAYING THE RESULTS ---
     if display_records:
