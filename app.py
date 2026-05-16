@@ -717,19 +717,21 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     
     doc.add_page_break()
 
-    # --- PAGE 2 ---
-        # Helper for page 2 header rows to remove spacing
+   # --- PAGE 2 ---
+    
+    # Helper for page 2 header rows to remove spacing
     def add_p2_header_row(cell, text, size=10):
         p = cell.paragraphs[0]
         p.paragraph_format.space_before = Pt(0)
         p.paragraph_format.space_after = Pt(0)
-        p.alignment = WD_ALIGN_PARAGRAPH.LEFT # Ensure text inside stays left
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
         run = p.add_run(text)
         run.font.size = Pt(size)
         
     top_table = doc.add_table(rows=4, cols=3)
     
-    # ---> ADD THIS LINE TO FIX LEFT ALIGNMENT <---
+    # FIX: Set table autofit to False and force LEFT alignment
+    top_table.autofit = False
     top_table.alignment = WD_TABLE_ALIGNMENT.LEFT
         
     for row in top_table.rows:
@@ -779,9 +781,10 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     # Certificate Content Table
     table = doc.add_table(rows=9, cols=2)
     
-    # ---> ADD THIS LINE TO FIX LEFT ALIGNMENT FOR CERTIFICATE <---
+    # FIX: Also set autofit false for the certificate table to ensure alignment
+    table.autofit = False
     table.alignment = WD_TABLE_ALIGNMENT.LEFT
-       
+        
     for row in table.rows:
         row.cells[0].width = Inches(0.4)
         row.cells[1].width = Inches(6.3)
@@ -789,11 +792,11 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     def add_row(idx, no, text, size=11):
         p_no = table.rows[idx].cells[0].paragraphs[0]
         run_no = p_no.add_run(no)
-        run_no.font.size = Pt(9) # <--- Font size for Gujarati numbers
+        run_no.font.size = Pt(9)
         
         p_text = table.rows[idx].cells[1].paragraphs[0]
         run_text = p_text.add_run(text)
-        run_text.font.size = Pt(9) # <--- Font size for Gujarati body text
+        run_text.font.size = Pt(9)
         
         p_text.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         p_text.paragraph_format.space_after = Pt(6)
@@ -813,7 +816,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     
     p_loc = doc.add_paragraph()
     run_loc = p_loc.add_run("સ્થળ : નવસારી\nતારીખ :")
-    run_loc.font.size = Pt(12) # <--- Font size for Location/Date
+    run_loc.font.size = Pt(12)
     doc.add_paragraph()
     
     table_sig = doc.add_table(rows=1, cols=2)
@@ -823,25 +826,25 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     p_s1 = table_sig.cell(0,0).paragraphs[0]
     run_s1 = p_s1.add_run("પ્રોજેક્ટ ઇનચાર્જની સહી અને હોદ્દો")
     run_s1.bold = True
-    run_s1.font.size = Pt(12) # <--- Font size for Signature 1
+    run_s1.font.size = Pt(12)
     
     p_s2 = table_sig.cell(0,1).paragraphs[0]
     run_s2 = p_s2.add_run("વિભાગીય વડાની સહી અને હોદ્દો")
     run_s2.bold = True
-    run_s2.font.size = Pt(12) # <--- Font size for Signature 2
+    run_s2.font.size = Pt(12)
     p_s2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
     doc.add_paragraph("\n")
     
     p_passed = doc.add_paragraph()
     run_passed = p_passed.add_run("Passed for Payment Rs ........................................\nRupees: ........................................................................................")
-    run_passed.font.size = Pt(12) # <--- Font size for Passed for Payment
+    run_passed.font.size = Pt(12)
     
     doc.add_paragraph()
     p_aao = doc.add_paragraph()
     run_aao = p_aao.add_run("Assistant Administrative Officer\nN. M. College of Agriculture\nNavsari-396 450")
     run_aao.bold = True
-    run_aao.font.size = Pt(12) # <--- Font size for AAO Signature block
+    run_aao.font.size = Pt(12)
     p_aao.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     bio = io.BytesIO()
