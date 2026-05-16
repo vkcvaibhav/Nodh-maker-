@@ -400,9 +400,7 @@ def create_docx(content):
     return bio.getvalue()
 
 def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_items):
-    doc = Document()
-    
-    doc = Document()
+       doc = Document()
     for section in doc.sections:
         section.top_margin = Inches(0.4)
         section.bottom_margin = Inches(0.5)
@@ -493,12 +491,12 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     p_to.add_run("પ્રતિ,\n").bold = True
     doc.add_paragraph(vendor_name).runs[0].bold = True
     doc.add_paragraph(vendor_address)
-    
-    doc.add_paragraph() # Spacing
+    p_to.paragraph_format.space_after = Pt(6)
 
     # --- SUBJECT ---
     p_subj = doc.add_paragraph()
     p_subj.add_run("વિષય: ખરીદી હુકમ").bold = True
+    p_to.paragraph_format.space_after = Pt(6)
     
     # --- BODY ---
     p_body = doc.add_paragraph("જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે નિચેની વસ્તુઓ બિલ સહિત રજુ કરવા વિનંતી.")
