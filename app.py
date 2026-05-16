@@ -825,6 +825,9 @@ with tab4:
             po_options.append(label)
             po_dict[label] = po
             
+        # THE MISSING LINE HAS BEEN RESTORED HERE:
+        selected_po_label = st.selectbox("પેમેન્ટ માટે ઓર્ડર પસંદ કરો (Select Pending PO):", po_options)
+        
         if selected_po_label:
             po_id, v_name, o_no, p_date, amt = po_dict[selected_po_label]
             
