@@ -638,7 +638,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     p_office = cell_left.paragraphs[0]
     run_office = p_office.add_run("Office No. 303")
     run_office.bold = True
-    run_office.font.size = Pt(12) # <--- Font size for Office No
+    run_office.font.size = Pt(16) # <--- Font size for Office No
     p_office.alignment = WD_ALIGN_PARAGRAPH.CENTER
     set_cell_border(cell_left, top={"sz": 12, "val": "single", "color": "000000"}, bottom={"sz": 12, "val": "single", "color": "000000"}, left={"sz": 12, "val": "single", "color": "000000"}, right={"sz": 12, "val": "single", "color": "000000"})
     
@@ -646,9 +646,9 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     cell_right = header_table.cell(0, 2)
     p_voucher = cell_right.paragraphs[0]
     run_v1 = p_voucher.add_run("Voucher No. ........................")
-    run_v1.font.size = Pt(11) # <--- Font size for Voucher No
+    run_v1.font.size = Pt(13) # <--- Font size for Voucher No
     run_v2 = p_voucher.add_run("\nDate....................................")
-    run_v2.font.size = Pt(11) # <--- Font size for Date
+    run_v2.font.size = Pt(13) # <--- Font size for Date
     set_cell_border(cell_right, top={"sz": 12, "val": "single", "color": "000000"}, bottom={"sz": 12, "val": "single", "color": "000000"}, left={"sz": 12, "val": "single", "color": "000000"}, right={"sz": 12, "val": "single", "color": "000000"})
 
     doc.add_paragraph() # Spacer
@@ -656,9 +656,9 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     # Center Heading 1
     p_col = doc.add_paragraph()
     p_col.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_col = p_col.add_run("N. M. COLLEGE OF AGRICULTURE.")
+    run_col = p_col.add_run("N. M. COLLEGE OF AGRICULTURE")
     run_col.bold = True
-    run_col.font.size = Pt(16) # <--- Font size for College Name
+    run_col.font.size = Pt(22) # <--- Font size for College Name
     p_col.paragraph_format.space_after = Pt(0)
     
     # Center Heading 2
@@ -666,7 +666,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     p_uni.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_uni = p_uni.add_run("Navsari Agricultural University, Navsari.-396450")
     run_uni.bold = True
-    run_uni.font.size = Pt(14) # <--- Font size for University Name
+    run_uni.font.size = Pt(20) # <--- Font size for University Name
     p_uni.paragraph_format.space_after = Pt(10)
     
     # Bold Border Line under heading
@@ -675,7 +675,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     set_cell_border(line_table.cell(0, 0), top={"sz": 24, "val": "single", "color": "000000"})
     
     # Pushing the Notes section to the bottom 25% of the page
-    for _ in range(25): 
+    for _ in range(22): 
         doc.add_paragraph()
 
     # Bold Border Line above Notes
@@ -687,15 +687,15 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     p_note = doc.add_paragraph()
     run_note = p_note.add_run("Note:-")
     run_note.bold = True
-    run_note.font.size = Pt(11) # <--- Font size for "Note:-" heading
+    run_note.font.size = Pt(15) # <--- Font size for "Note:-" heading
     p_note.paragraph_format.space_after = Pt(6)
     
-    def add_bullet(num, text, size=10):
+    def add_bullet(num, text, size=15):
         p = doc.add_paragraph()
         run_num = p.add_run(num + "\t")
-        run_num.font.size = Pt(size) # <--- Font size for bullet numbers
+        run_num.font.size = Pt(15) # <--- Font size for bullet numbers
         run_text = p.add_run(text)
-        run_text.font.size = Pt(size) # <--- Font size for bullet text
+        run_text.font.size = Pt(15) # <--- Font size for bullet text
         p.paragraph_format.left_indent = Inches(0.5)
         p.paragraph_format.first_line_indent = Inches(-0.5)
         p.paragraph_format.space_after = Pt(2)
