@@ -662,6 +662,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     doc.add_paragraph() # Spacer
     
     # Center Heading 1
+    p_col = doc.add_paragraph()
     p_col.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_col = p_col.add_run("N. M. COLLEGE OF AGRICULTURE")
     run_col.bold = True
