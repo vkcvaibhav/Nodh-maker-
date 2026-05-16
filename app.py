@@ -636,9 +636,10 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     # Left Box - Office No
     cell_left = header_table.cell(0, 0)
     p_office = cell_left.paragraphs[0]
+    p_office.paragraph_format.space_before = Pt(12)
     run_office = p_office.add_run("Office No. 303")
     run_office.bold = True
-    run_office.font.size = Pt(15) 
+    run_office.font.size = Pt(20) 
     p_office.alignment = WD_ALIGN_PARAGRAPH.CENTER
     set_cell_border(cell_left, top={"sz": 12, "val": "single", "color": "000000"}, bottom={"sz": 12, "val": "single", "color": "000000"}, left={"sz": 12, "val": "single", "color": "000000"}, right={"sz": 12, "val": "single", "color": "000000"})
     
@@ -654,7 +655,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     
     # Date Line
     p_v2 = cell_right.add_paragraph()
-    run_v2 = p_v2.add_run("Date:-....................")
+    run_v2 = p_v2.add_run("          Date:-....................")
     run_v2.font.size = Pt(15) 
     p_v2.paragraph_format.space_after = Pt(0)
     
