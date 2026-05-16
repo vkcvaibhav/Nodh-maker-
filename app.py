@@ -789,11 +789,11 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     def add_row(idx, no, text, size=11):
         p_no = table.rows[idx].cells[0].paragraphs[0]
         run_no = p_no.add_run(no)
-        run_no.font.size = Pt(size) # <--- Font size for Gujarati numbers
+        run_no.font.size = Pt(9) # <--- Font size for Gujarati numbers
         
         p_text = table.rows[idx].cells[1].paragraphs[0]
         run_text = p_text.add_run(text)
-        run_text.font.size = Pt(size) # <--- Font size for Gujarati body text
+        run_text.font.size = Pt(9) # <--- Font size for Gujarati body text
         
         p_text.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         p_text.paragraph_format.space_after = Pt(6)
