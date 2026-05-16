@@ -638,19 +638,28 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     p_office = cell_left.paragraphs[0]
     run_office = p_office.add_run("Office No. 303")
     run_office.bold = True
-    run_office.font.size = Pt(16) # <--- Font size for Office No
+    run_office.font.size = Pt(12) 
     p_office.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_office.paragraph_format.space_after = Pt(0) # <--- Removes space below Office No. 303
     set_cell_border(cell_left, top={"sz": 12, "val": "single", "color": "000000"}, bottom={"sz": 12, "val": "single", "color": "000000"}, left={"sz": 12, "val": "single", "color": "000000"}, right={"sz": 12, "val": "single", "color": "000000"})
     
     # Right Box - Voucher & Date
     cell_right = header_table.cell(0, 2)
-    p_voucher = cell_right.paragraphs[0]
-    run_v1 = p_voucher.add_run("Voucher No. ........................")
-    run_v1.font.size = Pt(13) # <--- Font size for Voucher No
-    run_v2 = p_voucher.add_run("\nDate....................................")
-    run_v2.font.size = Pt(13) # <--- Font size for Date
+    
+    # Voucher No. Line
+    p_v1 = cell_right.paragraphs[0]
+    run_v1 = p_v1.add_run("Voucher No. ........................")
+    run_v1.font.size = Pt(11) 
+    p_v1.paragraph_format.space_before = Pt(6) # <--- Adds space above Voucher No.
+    p_v1.paragraph_format.space_after = Pt(8)  # <--- Adds space between Voucher and Date
+    
+    # Date Line
+    p_v2 = cell_right.add_paragraph()
+    run_v2 = p_v2.add_run("Date....................................")
+    run_v2.font.size = Pt(11) 
+    p_v2.paragraph_format.space_after = Pt(0)
+    
     set_cell_border(cell_right, top={"sz": 12, "val": "single", "color": "000000"}, bottom={"sz": 12, "val": "single", "color": "000000"}, left={"sz": 12, "val": "single", "color": "000000"}, right={"sz": 12, "val": "single", "color": "000000"})
-
     doc.add_paragraph() # Spacer
     
     # Center Heading 1
