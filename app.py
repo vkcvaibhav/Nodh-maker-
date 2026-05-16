@@ -448,7 +448,7 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     doc.save(bio)
     return bio.getvalue()
 
-# --- NEW: Bill Payment Form & Pasting Form ---
+# --- Bill Payment Form ---
 def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount, amount_words):
     doc = Document()
     for section in doc.sections:
@@ -461,15 +461,11 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
     font.size = Pt(15)
     style.paragraph_format.space_after = Pt(0)
     
-    # Header logic
     p_header = doc.add_paragraph()
-    # RIGHT part
     p_header.add_run("No. ACN/ENTO/BILL/       /202\n").bold = True
-    # Right part
     r_right = p_header.add_run(f"NAVSARI-396450, Date: {datetime.date.today().strftime('%d/%m/%Y')}").bold = True
     p_header.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
-    # Custom alignment using spaces to mimic the PDF format strictly
     doc.add_paragraph().paragraph_format.space_after = Pt(10)
     
     doc.add_paragraph("To,").bold = True
@@ -486,7 +482,6 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
     p_body.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     doc.add_paragraph()
     
-    # Table exactly like the PDF
     table = doc.add_table(rows=2, cols=4)
     table.style = 'Table Grid'
     
@@ -495,11 +490,8 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
     
     hdr0[0].text = "Sr."
     hdr1[0].text = "No."
-    
     hdr0[1].text = "No. of Bill/Date"
-    
     hdr0[2].text = "Name of the Party"
-    
     hdr0[3].text = "Amount"
     hdr1[3].text = "Rs.              Ps."
     
@@ -516,7 +508,6 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
     table.columns[2].width = Inches(12.5)
     table.columns[3].width = Inches(1.5)
 
-    # Data row
     row = table.add_row().cells
     row[0].text = "1"
     row[1].text = f"No: {bill_no}\nDt: {bill_date}"
@@ -527,7 +518,6 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
         row[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         row[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
 
-    # Total Row
     total_row = table.add_row().cells
     table.cell(3,0).merge(table.cell(3,2))
     p_tot = total_row[0].paragraphs[0]
@@ -537,14 +527,12 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
     total_row[3].paragraphs[0].runs[0].bold = True
     total_row[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    # In Words Row
     word_row = table.add_row().cells
     table.cell(4,0).merge(table.cell(4,3))
     p_word = word_row[0].paragraphs[0]
     p_word.add_run("In words: ").bold = True
     p_word.add_run(f"Rupees {amount_words} Only.")
     
-    # Name of Party Row
     party_row = table.add_row().cells
     table.cell(5,0).merge(table.cell(5,3))
     p_party = party_row[0].paragraphs[0]
@@ -564,45 +552,127 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
     doc.save(bio)
     return bio.getvalue()
 
-def create_bill_pasting_form(budget_head, party_name, amount, amount_words):
+# --- PERFECT PDF REPLICA: Bill Pasting Form ---
+def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     doc = Document()
-    for section in doc.sections:
-        section.top_margin, section.bottom_margin = Inches(0.5), Inches(0.5)
-        section.left_margin, section.right_margin = Inches(0.8), Inches(0.8)
     
-    p_head = doc.add_paragraph()
-    p_head.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_head.add_run("NAVSARI AGRICULTURAL UNIVERSITY\n").bold = True
-    p_head.add_run("DEPARTMENT OF ENTOMOLOGY, NMCA, NAVSARI\n").bold = True
-    p_head.add_run("--- BILL PASTING & CERTIFICATE ---").bold = True
+    # Strict A4 Margins exactly like the PDF
+    section = doc.sections[0]
+    section.page_width = Mm(210)
+    section.page_height = Mm(297)
+    section.left_margin = Inches(0.8)
+    section.right_margin = Inches(0.8)
+    section.top_margin = Inches(0.8)
+    section.bottom_margin = Inches(0.8)
+    
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Times New Roman'
+    font.size = Pt(11)
+    rFonts = OxmlElement('w:rFonts')
+    rFonts.set(qn('w:ascii'), 'Times New Roman')
+    rFonts.set(qn('w:hAnsi'), 'Times New Roman')
+    rFonts.set(qn('w:cs'), 'Shruti')
+    font._element.append(rFonts)
+
+    # --- PAGE 1 ---
+    p_office = doc.add_paragraph("Office No. 303")
+    p_office.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_office.paragraph_format.space_after = Pt(0)
+
+    p_note = doc.add_paragraph("Note:-")
+    p_note.runs[0].bold = True
+    p_note.paragraph_format.space_after = Pt(0)
+
+    p_v = doc.add_paragraph("Voucher No. ............................")
+    p_v.paragraph_format.space_after = Pt(0)
+    doc.add_paragraph("Date..........").paragraph_format.space_after = Pt(12)
+    
+    p_col = doc.add_paragraph("N. M. COLLEGE OF AGRICULTURE.")
+    p_col.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_col.runs[0].bold = True
+    p_col.paragraph_format.space_after = Pt(0)
+    
+    p_uni = doc.add_paragraph("Navsari Agricultural University, Navsari.-396450")
+    p_uni.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_uni.runs[0].bold = True
+    p_uni.paragraph_format.space_after = Pt(20)
+    
+    def add_bullet(num, text):
+        p = doc.add_paragraph()
+        p.add_run(num + "\t").bold = False
+        p.add_run(text)
+        p.paragraph_format.left_indent = Inches(0.5)
+        p.paragraph_format.first_line_indent = Inches(-0.5)
+        
+    add_bullet("1.", "Quotation from at least three parties for purchase above Rs. 1000/- should be obtained.")
+    add_bullet("2.", "Purchase from authorized details and manufactures be certified on bill no other quotation were available due of purchase from manufacture or authorized dealers.")
+    add_bullet("3.", "A special previous sanction of V.C of campus, Navsari should invariably be obtained for dead stock of other valuable articles before the purchase is made.")
+    add_bullet("4.", "Purchase is made in the interested of University work.")
+    
+    doc.add_page_break()
+
+    # --- PAGE 2 ---
+    p_h1 = doc.add_paragraph(f"બજેટ સદર\t\t\t:- {budget_head} \t\tEXP. CODE NO. ____________")
+    p_h1.paragraph_format.space_after = Pt(0)
+    p_h2 = doc.add_paragraph(f"ફાળવેલ ગ્રાન્ટ વર્ષ: ૨૦  - ૨૦ \t:- {grant_year}")
+    p_h2.paragraph_format.space_after = Pt(0)
+    p_h3 = doc.add_paragraph(f"બીલની કુલ રકમ\t\t\t:- {amount}")
+    p_h3.paragraph_format.space_after = Pt(0)
+    p_h4 = doc.add_paragraph(f"ચુકવણું કરવામાં આવનાર પાર્ટીનું નામ :- {party_name}")
+    p_h4.paragraph_format.space_after = Pt(0)
+    doc.add_paragraph("(અંગ્રેજી કેપીટલ લેટર)")
+    
+    doc.add_paragraph()
+    p_cert = doc.add_paragraph(":: પ્રમાણપત્ર ::")
+    p_cert.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_cert.runs[0].bold = True
     doc.add_paragraph()
     
-    p_cert = doc.add_paragraph()
-    p_cert.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    cert_text = (
-        "Certified that the materials/equipment listed in the attached bill have been received in good condition, "
-        "as per the specifications ordered, and have been entered into the Dead Stock/Consumable register. "
-        f"Passed for payment of Rs. {float(amount):.2f}/- (Rupees {amount_words} Only) to M/s {party_name} "
-        f"under the Budget Head No: {budget_head}."
-    )
-    p_cert.add_run(cert_text)
+    table = doc.add_table(rows=9, cols=2)
+    for row in table.rows:
+        row.cells[0].width = Inches(0.4)
+        row.cells[1].width = Inches(6.3)
     
-    doc.add_paragraph().paragraph_format.space_after = Pt(30)
+    def add_row(idx, no, text):
+        table.rows[idx].cells[0].text = no
+        table.rows[idx].cells[1].text = text
+        table.rows[idx].cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        table.rows[idx].cells[1].paragraphs[0].paragraph_format.space_after = Pt(6)
+
+    add_row(0, "૧.", "આ બીલમાં જણાવેલ વસ્તુ ખરીદવાની/રીપેરીંગના ખર્ચની મંજુરી આપવાની સત્તા ગુજરાત રાજય કૃષિ યુનિવર્સિટીઓ (સતા સોપણી) નિયમ-૨૦૧૧ ના સ્ટેચ્યુટ નં. ૧૨૧ ની આઇટમ નં ____________ મુજબ એનાયત થયેલ સત્તા પ્રમાણે હેડ ઓફિસ/હેડ ઓફ યુનિટ/યુનિ. ઓફિસર્સ/માન. કુલપતિશ્રીની મંજુરી નં: _________________________________________ . તારીખ: ______/______/_________ થી મંજુરી મળેલ છે. હુકમની નકલ સામેલ છે.")
+    add_row(1, "૨.", f"આ બીલમાં જણાવેલ ખર્ચ આ વિભાગની ____________________________________ .યોજના બજેટ સદર_____________________ .માં સમાવેશ કરવામાં આવેલ છે.")
+    add_row(2, "૩.", "બીલમાં દર્શાવેલ માલની ખરીદી બજાર ભાવ તપાસી ભાવો મેળવી સૌથી ઓછા ભાવ મુજબ છે અને સારી સ્થિતિમાં મળેલ છે. જે કચેરીના સ્ટોર રોજમેળ રજી પાના નં. ____________../ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ) રજી. પાના નં. ____________ ડેડસ્ટોક રજી. નં.... ____________ / ટેલીફોન રજી. પાના નં ____________ / સ્ટેમ્પ રજી. પાના નં ____________ / સ્ટેશનરી રજી. પાના નં. ____________ .રજીસ્ટરનાં ____________ / પરચુરણ માલ સામાન /.... ____________../ રીપેરીંગ રજી. પાના નં.. ____________ નાં રોજ જમા કરવામાં આવેલ છે.")
+    add_row(3, "૪.", "સદર બીલમાં દર્શાવવામાં આવેલ ખર્ચ સેલ્સ ટેક્ષ / એડી.ટેક્ષ / એકસાઇડયુટી / સેન્ટ્રલ ટેક્ષ વિગેરે પાર્ટીના માન્ય થયેલ ભાવ મુજબ ચકાસણી કરવામાં આવેલ છે. અને તે મુજબ પાર્ટીના બીલમાં દર્શાવ્યા મુજબની રકમ રૂ. ____________ (અંકે ૩. ____________________________________) પુરા ચુકવવા ભલામણ કરવામાં આવે છે.")
+    add_row(4, "૫.", "બીલમાં દર્શાવેલ મુજબ વાહન નં.... ____________ .ની રીપેરીંગ કામગીરી સંતોષકારક થયેલ છે જેની નોંધ હિસ્ટ્રીશીટ રજી. પાના નં....... ____________ .../ રીપેરીંગ રજી. પાના નં. ____________ થી કરેલ છે. જે ચાલુ નાણાંકીય વર્ષ દરમ્યાન આ બીલ સહીત કુલ ખર્ચ રૂ... ____________./- (અંકે ૩....................................) થયેલ છે.")
+    add_row(5, "૬.", "બીલમાં દર્શાવેલ પેટ્રોલ / ડીઝલ / ઓઇલ વગેરે વાહન નં. ____________ .માટે ખરીદ કરવામાં આવેલ છે જે લોગબુક ભાગ નં. ____________ પાના નં. ____________ થી જમાં કરવામાં આવેલ છે.")
+    add_row(6, "૭.", "તા. ____________ બીલમાં દર્શાવેલ વાહન નં. ____________ ના રીપેરીંગ કામ કરતી વખતે પરત આવેલ જુના સ્પેર પાર્ટસ મેળવીને આ કચેરીનાં રદ્દ રજી. પાના નં. ____________ ના રોજ જમાં લીધેલ છે.")
+    add_row(7, "૮.", "તા. ____________ સદર બીલની નોંધ કચેરી ખાતેના બીલ રજી પાના નં. ____________ અનુ.નં.............. ........ કરવામાં આવેલ છે.\nસંશોધન નિયામકશ્રીના ૩૦/૧૦/૨૦૨૧ના પરિપત્રનો અમલ કરેલ છે.")
+    add_row(8, "૯.", "સદરહું ખર્ચ કચેરીની અગત્યની કામગીરીને ધ્યાને લઇ તેમજ યુનિવર્સિટીનાં હિતાર્થે કરવામાં આવેલ છે.")
     
-    p_sig = doc.add_paragraph()
-    p_sig.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    p_sig.add_run("Professor and Head\nDepartment of Entomology").bold = True
+    doc.add_paragraph()
+    doc.add_paragraph("સ્થળ : નવસારી\nતારીખ :")
+    doc.add_paragraph()
     
-    doc.add_paragraph().paragraph_format.space_after = Pt(20)
+    table_sig = doc.add_table(rows=1, cols=2)
+    for cell in table_sig.rows[0].cells:
+        cell.width = Inches(3.4)
     
-    # Blank box for pasting
-    table = doc.add_table(rows=1, cols=1)
-    table.style = 'Table Grid'
-    cell = table.cell(0,0)
-    cell.height = Inches(6.0)
-    p_box = cell.paragraphs[0]
-    p_box.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_box.add_run("\n\n\n\n\n[ PASTE ORIGINAL BILL HERE ]").font.color.rgb = None
+    p_s1 = table_sig.cell(0,0).paragraphs[0]
+    p_s1.add_run("પ્રોજેક્ટ ઇનચાર્જની સહી અને હોદ્દો").bold = True
+    
+    p_s2 = table_sig.cell(0,1).paragraphs[0]
+    p_s2.add_run("વિભાગીય વડાની સહી અને હોદ્દો").bold = True
+    p_s2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    
+    doc.add_paragraph("\n")
+    doc.add_paragraph("Passed for Payment Rs ........................................")
+    doc.add_paragraph("Rupees: ........................................................................................")
+    
+    doc.add_paragraph()
+    p_aao = doc.add_paragraph("Assistant Administrative Officer\nN. M. College of Agriculture\nNavsari-396 450")
+    p_aao.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_aao.runs[0].bold = True
 
     bio = io.BytesIO()
     doc.save(bio)
@@ -617,11 +687,13 @@ st.title("સાદર નોંધ જનરેટર (Intelligent Sadar Nondh 
 
 api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
 
-tab1, tab2, tab3, tab4 = st.tabs([
+# --- ADDED TAB 5 ---
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "નવી સાદર નોંધ (Create)", 
     "જુની નોંધ (Archives)", 
     "ખરીદી હુકમ (Purchase Order)",
-    "બિલ પેમેન્ટ (Bill Payment)"
+    "બિલ પેમેન્ટ (Bill Payment)",
+    "બિલ પેસ્ટિંગ (Bill Pasting)"
 ])
 
 with tab1:
@@ -766,7 +838,6 @@ with tab3:
             options.append(label)
     selected_nondh = st.selectbox("અગાઉ સેવ કરેલ નોંધ પસંદ કરો:", options)
     
-    # Dedicated section to save the Signed PO
     st.markdown("#### ૨. સહી કરેલ ખરીદી હુકમ અપલોડ કરો (Upload Signed PO - Optional)")
     uploaded_po = st.file_uploader("મંજૂર થયેલ/સહીવાળો ઓર્ડર અપલોડ કરો:", type=["pdf", "jpg", "jpeg", "png"], key="po_up")
     if uploaded_po:
@@ -797,16 +868,14 @@ with tab3:
             grand_total = pd.to_numeric(po_df['Total Price'], errors='coerce').fillna(0).sum()
             
             po_docx = create_purchase_order_docx(vendor_name, vendor_address, outward_no, formatted_date, po_df)
-            
-            # Save into Database for Tab 4 workflow
             save_po_to_db(vendor_name, outward_no, formatted_date, grand_total)
             
             st.download_button("Download Purchase Order (DOCX)", data=po_docx, file_name=f"PO_{vendor_name}.docx")
             st.success("ખરીદી હુકમ તૈયાર છે અને પેમેન્ટ માટે Tab 4 માં મોકલી દેવામાં આવ્યો છે!")
 
-# --- NEW TAB 4 ---
+# --- TAB 4 (Bill Payment ONLY) ---
 with tab4:
-    st.markdown("### 💳 બિલ પેમેન્ટ ફોર્મ (Bill Payment & Pasting workflow)")
+    st.markdown("### 💳 બિલ પેમેન્ટ ફોર્મ (Bill Payment Form)")
     st.info("જે ખરીદીના હુકમ (Purchase Orders) માટે બિલ ચૂકવવાનું બાકી છે, તે જ અહીં દેખાશે.")
     
     unfinished_pos = get_unfinished_pos()
@@ -814,39 +883,32 @@ with tab4:
     if not unfinished_pos:
         st.success("હાલમાં કોઈ બિલ પેમેન્ટ બાકી નથી! (No unfinished purchase orders).")
     else:
-        # Create a dictionary to map selectbox labels to PO data
-        po_dict = {}
-        po_options = []
+        po_dict_tab4 = {}
+        po_options_tab4 = []
         for po in unfinished_pos:
             po_id, v_name, o_no, p_date, amt = po
             label = f"PO #{o_no} - {v_name} - ₹{amt} ({p_date})"
-            po_options.append(label)
-            po_dict[label] = po
+            po_options_tab4.append(label)
+            po_dict_tab4[label] = po
             
-        # THE MISSING LINE HAS BEEN RESTORED HERE:
-        selected_po_label = st.selectbox("પેમેન્ટ માટે ઓર્ડર પસંદ કરો (Select Pending PO):", po_options)
+        selected_po_label_t4 = st.selectbox("પેમેન્ટ ફોર્મ માટે ઓર્ડર પસંદ કરો (Select Pending PO):", po_options_tab4, key="po_tab4")
         
-        if selected_po_label:
-            po_id, v_name, o_no, p_date, amt = po_dict[selected_po_label]
+        if selected_po_label_t4:
+            po_id, v_name, o_no, p_date, amt = po_dict_tab4[selected_po_label_t4]
             
-            # --- NEW: Reset Session State when switching between different POs ---
-            if st.session_state.get("current_po_id") != po_id:
-                st.session_state.current_po_id = po_id
+            if st.session_state.get("current_po_id_t4") != po_id:
+                st.session_state.current_po_id_t4 = po_id
                 st.session_state.ext_bill_no = "INV-"
                 st.session_state.ext_amt = float(amt)
                 st.session_state.ext_words = ""
                 st.session_state.last_invoice = None
-            # ---------------------------------------------------------------------
 
             st.markdown("#### ઇન્વોઇસ અને બજેટની વિગતો (Invoice Details)")
             
             col_b1, col_b2 = st.columns(2)
             with col_b1:
-                budget_head = st.text_input("Budget Head No.", value="303/2092 (AINP on Agril Acarology)")
-                
-                # CHANGED: Connected to Session State
+                budget_head = st.text_input("Budget Head No.", value="303/2092 (AINP on Agril Acarology)", key="bh_t4")
                 bill_no = st.text_input("ઇન્વોઇસ/બિલ નંબર (Vendor Bill No.)", value=st.session_state.ext_bill_no)
-                
                 invoice_upload = st.file_uploader("પાર્ટીનું બિલ અપલોડ કરો (Upload Vendor Invoice PDF/Img)", type=["pdf", "jpg", "png"])
                 
                 if invoice_upload:
@@ -855,14 +917,12 @@ with tab4:
                         f.write(invoice_upload.getbuffer())
                     st.success("ઇન્વોઇસ સેવ થઈ ગયું!")
 
-                    # --- NEW: AI Auto-Extraction Logic ---
                     if invoice_upload.name != st.session_state.last_invoice and api_key:
                         with st.spinner("AI દ્વારા બિલની વિગતો વાંચવામાં આવી રહી છે... (Extracting...)"):
                             try:
                                 import json
                                 genai.configure(api_key=api_key)
-                                model = genai.GenerativeModel('gemini-3.1-pro-preview') 
-                                
+                                model = genai.GenerativeModel('gemini-1.5-flash') 
                                 prompt = """
                                 Extract the following from this invoice:
                                 1. Invoice/Bill Number
@@ -871,8 +931,6 @@ with tab4:
                                 Return ONLY a valid JSON object in this exact format:
                                 {"bill_no": "INV-123", "amount": 1234.50, "amount_words": "One Thousand..."}
                                 """
-                                
-                                # Read PDF text or Pass Image directly
                                 if invoice_upload.type == "application/pdf":
                                     reader = PyPDF2.PdfReader(invoice_upload)
                                     text = "".join([page.extract_text() for page in reader.pages])
@@ -881,51 +939,69 @@ with tab4:
                                     img = Image.open(invoice_upload)
                                     response = model.generate_content([prompt, img])
                                 
-                                # Parse the JSON response securely
                                 res_text = response.text.strip().replace("```json", "").replace("```", "")
                                 data = json.loads(res_text)
-                                
-                                # Update Session State
                                 st.session_state.ext_bill_no = str(data.get("bill_no", "INV-"))
                                 st.session_state.ext_amt = float(data.get("amount", amt))
                                 st.session_state.ext_words = str(data.get("amount_words", ""))
                                 st.session_state.last_invoice = invoice_upload.name
-                                
-                                st.rerun() # Refresh the UI with new values
-                                
+                                st.rerun() 
                             except Exception as e:
                                 st.warning(f"આપમેળે વિગત મેળવવામાં ભૂલ: {e}. કૃપા કરીને જાતે ભરો.")
-                    # -------------------------------------
 
             with col_b2:
                 bill_date = st.date_input("ઇન્વોઇસની તારીખ (Bill Date)", value=datetime.date.today())
-                
-                # CHANGED: Connected to Session State
-                final_amt = st.number_input("ચૂકવવા પાત્ર રકમ (Amount to Pay)", value=st.session_state.ext_amt)
+                final_amt = st.number_input("ચૂકવવા પાત્ર રકમ (Amount to Pay)", value=st.session_state.ext_amt, key="amt_t4")
                 amount_words = st.text_input("રકમ શબ્દોમાં (Amount in Words - English)", value=st.session_state.ext_words, placeholder="e.g., Four Thousand Two Hundred Forty Eight")
             
             st.markdown("---")
-            col_btn1, col_btn2, col_btn3 = st.columns(3)
+            if st.button("📄 Generate Bill Payment Form"):
+                if not amount_words: st.error("Please enter the amount in words!")
+                else:
+                    bp_docx = create_bill_payment_form(budget_head, bill_no, bill_date.strftime("%d/%m/%Y"), v_name, final_amt, amount_words)
+                    st.download_button("Download Bill Payment Form", data=bp_docx, file_name=f"Payment_Form_{v_name}.docx")
+
+# --- TAB 5 (Bill Pasting & Mark Paid ONLY) ---
+with tab5:
+    st.markdown("### 📑 બિલ પેસ્ટિંગ અને પ્રમાણપત્ર (Bill Pasting Form)")
+    
+    unfinished_pos_t5 = get_unfinished_pos()
+    
+    if not unfinished_pos_t5:
+        st.success("હાલમાં કોઈ બિલ પેમેન્ટ બાકી નથી! (No unfinished purchase orders).")
+    else:
+        po_dict_tab5 = {}
+        po_options_tab5 = []
+        for po in unfinished_pos_t5:
+            po_id, v_name, o_no, p_date, amt = po
+            label = f"PO #{o_no} - {v_name} - ₹{amt} ({p_date})"
+            po_options_tab5.append(label)
+            po_dict_tab5[label] = po
             
-            with col_btn1:
-                # 1. Download Bill Payment Form
-                if st.button("📄 Generate Bill Payment Form"):
-                    if not amount_words: st.error("Please enter the amount in words!")
-                    else:
-                        bp_docx = create_bill_payment_form(budget_head, bill_no, bill_date.strftime("%d/%m/%Y"), v_name, final_amt, amount_words)
-                        st.download_button("Download Bill Payment Form", data=bp_docx, file_name=f"Payment_Form_{v_name}.docx")
+        selected_po_label_t5 = st.selectbox("પેસ્ટિંગ ફોર્મ માટે ઓર્ડર પસંદ કરો:", po_options_tab5, key="po_tab5")
+        
+        if selected_po_label_t5:
+            po_id_t5, v_name_t5, o_no_t5, p_date_t5, amt_t5 = po_dict_tab5[selected_po_label_t5]
+
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                budget_head_pst = st.text_input("Budget Head No.", value="303/2092 (AINP on Agril Acarology)", key="bh_t5")
+                grant_year = st.text_input("ફાળવેલ ગ્રાન્ટ વર્ષ (Grant Year)", value="૨૦૨૫-૨૦૨૬")
+            with col_p2:
+                final_amt_pst = st.number_input("બીલની કુલ રકમ (Amount)", value=float(amt_t5), key="amt_t5")
+                party_name_pst = st.text_input("પાર્ટીનું નામ (Party Name)", value=v_name_t5, key="party_t5")
+                
+            st.markdown("---")
+            col_btn_pst1, col_btn_pst2 = st.columns(2)
             
-            with col_btn2:
-                # 2. Download Bill Pasting Form
-                if st.button("📑 Generate Bill Pasting Form"):
-                    if not amount_words: st.error("Please enter the amount in words!")
-                    else:
-                        pst_docx = create_bill_pasting_form(budget_head, v_name, final_amt, amount_words)
-                        st.download_button("Download Pasting Form", data=pst_docx, file_name=f"Pasting_Form_{v_name}.docx")
+            with col_btn_pst1:
+                if st.button("📑 Generate Exact Bill Pasting Form"):
+                    pst_docx = create_bill_pasting_form(budget_head_pst, grant_year, party_name_pst, final_amt_pst)
+                    st.download_button("Download Pasting Form", data=pst_docx, file_name=f"Pasting_Form_{v_name_t5}.docx")
             
-            with col_btn3:
+            with col_btn_pst2:
                 # 3. Mark as Paid
-                if st.button("✅ બિલ પેમેન્ટ પૂરું કરો (Mark as Paid)"):
-                    mark_po_as_paid(po_id)
+                if st.button("✅ બિલ પેમેન્ટ પૂરું કરો (Mark as Paid)", key="mark_paid"):
+                    mark_po_as_paid(po_id_t5)
                     st.success("ઓર્ડર પેમેન્ટ લિસ્ટમાંથી દૂર કરવામાં આવ્યો છે! રિફ્રેશ કરો.")
                     st.rerun()
