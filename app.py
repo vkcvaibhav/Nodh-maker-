@@ -17,6 +17,9 @@ from docx import Document
 from docx.shared import Mm, Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.enum.table import WD_ALIGN_VERTICAL
+from docx.shared import Inches, Pt, Mm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.section import WD_ORIENTATION
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
