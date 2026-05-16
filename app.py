@@ -817,8 +817,8 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     add_row(8, "૯.", "સદરહું ખર્ચ કચેરીની અગત્યની કામગીરીને ધ્યાને લઇ તેમજ યુનિવર્સિટીનાં હિતાર્થે કરવામાં આવેલ છે.", size=11)
     
     p_loc = doc.add_paragraph()
-    p_loc.paragraph_format.space_before = Pt(6) # Small gap before location
-    p_loc.paragraph_format.space_after = Pt(6)
+    p_loc.paragraph_format.space_before = Pt(2) # Small gap before location
+    p_loc.paragraph_format.space_after = Pt(12)
     run_loc = p_loc.add_run("સ્થળ : નવસારી\nતારીખ :")
     run_loc.font.size = Pt(12)
     
