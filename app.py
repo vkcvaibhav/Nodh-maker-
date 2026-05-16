@@ -607,6 +607,10 @@ def set_cell_border(cell, **kwargs):
 def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount_in_guj_words, reg_type, reg_page_no, bill_reg_date, bill_reg_page_no, bill_reg_sr_no):
     doc = Document()
     
+    # --- Helper to convert English digits to Gujarati digits ---
+    def eng_to_guj(text):
+        return str(text).translate(str.maketrans("0123456789", "૦૧૨૩૪૫૬૭૮૯"))
+
     # Strict A4 Margins
     section = doc.sections[0]
     section.page_width = Mm(210)
@@ -617,7 +621,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     section.bottom_margin = Inches(0.2)
     section.gutter = Inches(0)
     
-    # Set base fonts (Times New Roman / Shruti for Gujarati)
+    # Set base fonts
     style = doc.styles['Normal']
     rFonts = OxmlElement('w:rFonts')
     rFonts.set(qn('w:ascii'), 'Times New Roman')
@@ -629,10 +633,9 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     header_table = doc.add_table(rows=1, cols=3)
     header_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     header_table.columns[0].width = Inches(2.0)
-    header_table.columns[1].width = Inches(2.7) # Spacer
+    header_table.columns[1].width = Inches(2.7) 
     header_table.columns[2].width = Inches(2.0)
     
-    # Left Box - Office No
     cell_left = header_table.cell(0, 0)
     p_office = cell_left.paragraphs[0]
     p_office.paragraph_format.space_before = Pt(12)
@@ -642,7 +645,6 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     p_office.alignment = WD_ALIGN_PARAGRAPH.CENTER
     set_cell_border(cell_left, top={"sz": 12, "val": "single", "color": "000000"}, bottom={"sz": 12, "val": "single", "color": "000000"}, left={"sz": 12, "val": "single", "color": "000000"}, right={"sz": 12, "val": "single", "color": "000000"})
     
-    # Right Box - Voucher & Date
     cell_right = header_table.cell(0, 2)
     p_v1 = cell_right.paragraphs[0]
     run_v1 = p_v1.add_run("Voucher No:-....................")
@@ -675,8 +677,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     line_table.columns[0].width = Inches(6.7)
     set_cell_border(line_table.cell(0, 0), top={"sz": 24, "val": "single", "color": "000000"})
     
-    for _ in range(15): 
-        doc.add_paragraph()
+    for _ in range(15): doc.add_paragraph()
 
     line_table_2 = doc.add_table(rows=1, cols=1)
     line_table_2.columns[0].width = Inches(6.7)
@@ -739,7 +740,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
 
     add_p2_header_row(top_table.cell(1,0), "ફાળવેલ ગ્રાન્ટ વર્ષ: ૨૦  - ૨૦")
     add_p2_header_row(top_table.cell(1,1), ":-")
-    add_p2_header_row(top_table.cell(1,2), "                     ") # Blank for manual entry
+    add_p2_header_row(top_table.cell(1,2), "                     ")
     
     add_p2_header_row(top_table.cell(2,0), "બીલની કુલ રકમ")
     add_p2_header_row(top_table.cell(2,1), ":-")
@@ -783,8 +784,14 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
         run_text.font.size = Pt(9)
         p_text.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
-    # --- DYNAMIC GUJARATI TEXT FILLING FOR REGISTER ---
-    # મૂળભૂત રીતે બધી જગ્યા ખાલી (____________) રહેશે.
+    # --- Convert inputs to Gujarati digits ---
+    guj_amount = eng_to_guj(f"{amount:.2f}")
+    guj_reg_page = eng_to_guj(reg_page_no)
+    guj_bill_reg_page = eng_to_guj(bill_reg_page_no)
+    guj_bill_reg_sr = eng_to_guj(bill_reg_sr_no)
+    guj_bill_date = eng_to_guj(bill_reg_date)
+    
+    # --- Register Setup ---
     blanks = {
         "સ્ટોર રોજમેળ": "____________",
         "ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ)": "____________",
@@ -796,14 +803,12 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
         "રીપેરીંગ": "____________"
     }
 
-    # યુઝર જે રજીસ્ટર પસંદ કરશે, માત્ર તેમાં જ પાના નંબર (reg_page_no) ભરાશે.
-    if reg_page_no:
+    if guj_reg_page:
         if reg_type in blanks:
-            blanks[reg_type] = f" {reg_page_no} "
+            blanks[reg_type] = f" {guj_reg_page} "
 
     cert_2 = "આ બીલમાં જણાવેલ ખર્ચ આ વિભાગની આઇ.સી.એ.આર. યોજના બજેટ સદર ૩૦૩/૨૦૯૨ માં સમાવેશ કરવામાં આવેલ છે."
     
-    # મુદ્દા નં ૩ માટે આખું વાક્ય, જેમાં ખાલી જગ્યાઓ ભરાશે:
     cert_3 = (
         f"બીલમાં દર્શાવેલ માલની ખરીદી બજાર ભાવ તપાસી ભાવો મેળવી સૌથી ઓછા ભાવ મુજબ છે અને સારી સ્થિતિમાં મળેલ છે. "
         f"જે કચેરીના સ્ટોર રોજમેળ રજી પાના નં. {blanks['સ્ટોર રોજમેળ']}../ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ) "
@@ -813,8 +818,8 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
         f"રજી. પાના નં.. {blanks['રીપેરીંગ']} નાં રોજ જમા કરવામાં આવેલ છે."
     )
     
-    cert_4 = f"સદર બીલમાં દર્શાવવામાં આવેલ ખર્ચ સેલ્સ ટેક્ષ / એડી.ટેક્ષ / એકસાઇડયુટી / સેન્ટ્રલ ટેક્ષ વિગેરે પાર્ટીના માન્ય થયેલ ભાવ મુજબ ચકાસણી કરવામાં આવેલ છે. અને તે મુજબ પાર્ટીના બીલમાં દર્શાવ્યા મુજબની રકમ રૂ. {amount:.2f}/- (અંકે રૂ. {amount_in_guj_words}) પુરા ચુકવવા ભલામણ કરવામાં આવે છે."
-    cert_8 = f"તા. {bill_reg_date} સદર બીલની નોંધ કચેરી ખાતેના બીલ રજી પાના નં. {bill_reg_page_no} અનુ.નં. {bill_reg_sr_no} કરવામાં આવેલ છે."
+    cert_4 = f"સદર બીલમાં દર્શાવવામાં આવેલ ખર્ચ સેલ્સ ટેક્ષ / એડી.ટેક્ષ / એકસાઇડયુટી / સેન્ટ્રલ ટેક્ષ વિગેરે પાર્ટીના માન્ય થયેલ ભાવ મુજબ ચકાસણી કરવામાં આવેલ છે. અને તે મુજબ પાર્ટીના બીલમાં દર્શાવ્યા મુજબની રકમ રૂ. {guj_amount}/- (અંકે રૂ. {amount_in_guj_words}) પુરા ચુકવવા ભલામણ કરવામાં આવે છે."
+    cert_8 = f"તા. {guj_bill_date} સદર બીલની નોંધ કચેરી ખાતેના બીલ રજી પાના નં. {guj_bill_reg_page} અનુ.નં. {guj_bill_reg_sr} કરવામાં આવેલ છે."
 
     add_row(0, "૧.", "આ બીલમાં જણાવેલ વસ્તુ ખરીદવાની/રીપેરીંગના ખર્ચની મંજુરી આપવાની સત્તા ગુજરાત રાજય કૃષિ યુનિવર્સિટીઓ (સતા સોપણી) નિયમ-૨૦૧૧ ના સ્ટેચ્યુટ નં. ૧૨૧ ની આઇટમ નં ____________ મુજબ એનાયત થયેલ સત્તા પ્રમાણે હેડ ઓફિસ/હેડ ઓફ યુનિટ/યુનિ. ઓફિસર્સ/માન. કુલપતિશ્રીની મંજુરી નં: _________________________________________ . તારીખ: ______/______/_________ થી મંજુરી મળેલ છે. હુકમની નકલ સામેલ છે.", size=11)
     add_row(1, "૨.", cert_2, size=11)
@@ -833,52 +838,42 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     run_special_note = p_special_note.add_run("સદરહું ખર્ચ કચેરીની અગત્યની કામગીરીને ધ્યાને લઇ તેમજ યુનિવર્સિટીનાં હિતાર્થે કરવામાં આવેલ છે.")
     run_special_note.font.size = Pt(11)
     
-    # Auto fill today's date
-    today_str = datetime.date.today().strftime('%d/%m/%Y')
+    today_guj = eng_to_guj(datetime.date.today().strftime('%d/%m/%Y'))
     p_loc = doc.add_paragraph()
     p_loc.paragraph_format.space_before = Pt(2) 
     p_loc.paragraph_format.space_after = Pt(12)
-    run_loc = p_loc.add_run(f"સ્થળ : નવસારી\nતારીખ : {today_str}")
+    run_loc = p_loc.add_run(f"સ્થળ : નવસારી\nતારીખ : {today_guj}")
     run_loc.font.size = Pt(12)
     
     table_sig = doc.add_table(rows=1, cols=2)
     table_sig.alignment = WD_TABLE_ALIGNMENT.LEFT
-    for cell in table_sig.rows[0].cells:
-        cell.width = Inches(3.4)
+    for cell in table_sig.rows[0].cells: cell.width = Inches(3.4)
     
     p_s1 = table_sig.cell(0,0).paragraphs[0]
-    p_s1.paragraph_format.space_before = Pt(0)
-    p_s1.paragraph_format.space_after = Pt(0)
+    p_s1.paragraph_format.space_before, p_s1.paragraph_format.space_after = Pt(0), Pt(0)
     run_s1 = p_s1.add_run("પ્રોજેક્ટ ઇનચાર્જની સહી અને હોદ્દો")
-    run_s1.bold = True
-    run_s1.font.size = Pt(12)
+    run_s1.bold, run_s1.font.size = True, Pt(12)
     
     p_s2 = table_sig.cell(0,1).paragraphs[0]
-    p_s2.paragraph_format.space_before = Pt(0)
-    p_s2.paragraph_format.space_after = Pt(0)
+    p_s2.paragraph_format.space_before, p_s2.paragraph_format.space_after = Pt(0), Pt(0)
     run_s2 = p_s2.add_run("વિભાગીય વડાની સહી અને હોદ્દો")
-    run_s2.bold = True
-    run_s2.font.size = Pt(12)
+    run_s2.bold, run_s2.font.size = True, Pt(12)
     p_s2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
     p_passed = doc.add_paragraph()
-    p_passed.paragraph_format.space_before = Pt(20) 
-    p_passed.paragraph_format.space_after = Pt(6)
+    p_passed.paragraph_format.space_before, p_passed.paragraph_format.space_after = Pt(20), Pt(6)
     run_passed = p_passed.add_run("Passed for Payment Rs ........................................\nRupees: ........................................................................................")
     run_passed.font.size = Pt(12)
     
     p_aao = doc.add_paragraph()
-    p_aao.paragraph_format.space_before = Pt(0)
-    p_aao.paragraph_format.space_after = Pt(0)
+    p_aao.paragraph_format.space_before, p_aao.paragraph_format.space_after = Pt(0), Pt(0)
     run_aao = p_aao.add_run("Assistant Administrative Officer\nN. M. College of Agriculture\nNavsari-396 450")
-    run_aao.bold = True
-    run_aao.font.size = Pt(12)
+    run_aao.bold, run_aao.font.size = True, Pt(12)
     p_aao.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     bio = io.BytesIO()
     doc.save(bio)
     return bio.getvalue()
-
 
 # ==========================================
 # Streamlit App UI
@@ -1166,6 +1161,9 @@ with tab4:
 with tab5:
     st.markdown("### 📑 બિલ પેસ્ટિંગ અને પ્રમાણપત્ર (Bill Pasting Form)")
     
+    if "auto_guj_words" not in st.session_state:
+        st.session_state.auto_guj_words = ""
+
     unfinished_pos_t5 = get_unfinished_pos()
     
     if not unfinished_pos_t5:
@@ -1187,12 +1185,31 @@ with tab5:
             col_p1, col_p2 = st.columns(2)
             with col_p1:
                 budget_head_pst = st.text_input("Budget Head No.", value="303/2092 (AINP on Agril Acarology)", key="bh_t5")
-                # ફાળવેલ ગ્રાન્ટ વર્ષ હવે બ્લેન્ક રહે છે જેથી પ્રિન્ટ કાઢીને જાતે લખી શકાય
                 grant_year = st.text_input("ફાળવેલ ગ્રાન્ટ વર્ષ (Grant Year)", value="", placeholder="હાથેથી લખવા માટે ખાલી છોડી દો")
                 party_name_pst = st.text_input("પાર્ટીનું નામ (Party Name)", value=v_name_t5, key="party_t5")
             with col_p2:
                 final_amt_pst = st.number_input("બીલની કુલ રકમ (Amount)", value=float(amt_t5), key="amt_t5")
-                amt_words_guj = st.text_input("રકમ શબ્દોમાં (ગુજરાતીમાં)", placeholder="દા.ત., ત્રણ હજાર નવસો છપ્પન")
+                
+                # AI Auto Fill માટે બે કોલમ
+                col_guj1, col_guj2 = st.columns([3, 1])
+                with col_guj1:
+                    amt_words_guj = st.text_input("રકમ શબ્દોમાં (ગુજરાતીમાં)", value=st.session_state.auto_guj_words, placeholder="દા.ત., ત્રણ હજાર નવસો છપ્પન")
+                with col_guj2:
+                    st.write("") 
+                    if st.button("✨ AI થી ભરો"):
+                        if api_key:
+                            with st.spinner("અનુવાદ થઈ રહ્યો છે..."):
+                                try:
+                                    genai.configure(api_key=api_key)
+                                    model = genai.GenerativeModel('gemini-1.5-flash')
+                                    prompt = f"Translate the number {final_amt_pst} into Gujarati words. Return ONLY the Gujarati translation. Example: for 3956 return 'ત્રણ હજાર નવસો છપ્પન'."
+                                    res = model.generate_content(prompt)
+                                    st.session_state.auto_guj_words = res.text.strip()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error("AI Error.")
+                        else:
+                            st.warning("API Key is required!")
                 
             st.markdown("#### 📝 રજીસ્ટર અને નોંધની વિગતો (Register Details)")
             col_r1, col_r2 = st.columns(2)
@@ -1210,7 +1227,7 @@ with tab5:
             with col_btn_pst1:
                 if st.button("📑 Generate Exact Bill Pasting Form"):
                     if not amt_words_guj:
-                        st.error("કૃપા કરીને રકમ શબ્દોમાં (ગુજરાતીમાં) લખો.")
+                        st.error("કૃપા કરીને રકમ શબ્દોમાં (ગુજરાતીમાં) લખો અથવા 'AI થી ભરો' બટન દબાવો.")
                     elif not reg_page_no or not bill_reg_page_no or not bill_reg_sr_no:
                         st.warning("કૃપા કરીને રજીસ્ટરના પાના નંબર અને અનુક્રમ નંબર ભરો.")
                     else:
