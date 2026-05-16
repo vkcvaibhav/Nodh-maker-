@@ -627,41 +627,12 @@ with tab2:
             st.error(f"Search error: {e}")
             return records
 
-    # --- 3. FILTERING ---
+# --- 3. FILTERING ---
     if search_query:
         with st.spinner("માહિતી શોધાઈ રહી છે... (Searching semantically...)"):
             display_records = smart_search_gemini(search_query, all_records)
     else:
         display_records = all_records
-
-    # --- 4. DISPLAYING THE RESULTS ---
-    if display_records:
-        st.success(f"કુલ {len(display_records)} રેકોર્ડ મળ્યા.")
-        for idx, record in enumerate(display_records):
-            
-            # --- SAFE UNPACKING FOR DISPLAY ---
-            if len(record) == 3:
-                date, subject, content = record
-            elif len(record) == 2:
-                subject, content = record
-                date = "જૂનો રેકોર્ડ (GitHub)" # Default date for Word docs
-            else:
-                date, subject, content = "N/A", "Unknown", str(record)
-            # ----------------------------------
-
-            with st.expander(f"{date} - {subject}"):
-                arc_col1, arc_col2 = st.columns([2, 8])
-                with arc_col2:
-                    st.markdown(content)
-                
-                archived_docx = create_docx(content)
-                st.download_button(label="Download (Word)",
-                                   data=archived_docx,
-                                   file_name=f"Archive_Doc_{idx}.docx",
-                                   mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                   key=f"dl_smart_{idx}") 
-    else:
-        st.info("કોઈ રેકોર્ડ મળેલ નથી (No matching records found).")
 
     # --- 4. DISPLAYING THE RESULTS ---
     if display_records:
@@ -683,7 +654,6 @@ with tab2:
                 with arc_col2:
                     st.markdown(content)
                 
-                # We also removed the '/' replace logic from the filename to prevent errors with GitHub files
                 archived_docx = create_docx(content)
                 st.download_button(label="Download (Word)",
                                    data=archived_docx,
