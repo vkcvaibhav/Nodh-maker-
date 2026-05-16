@@ -723,7 +723,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     def add_p2_header_row(cell, text, size=12):
         p = cell.paragraphs[0]
         run = p.add_run(text)
-        run.font.size = Pt(size) # <--- Font size for Page 2 top details
+        run.font.size = Pt(15) # <--- Font size for Page 2 top details
         
     top_table = doc.add_table(rows=4, cols=3)
     for row in top_table.rows:
