@@ -863,7 +863,7 @@ with tab4:
                             try:
                                 import json
                                 genai.configure(api_key=api_key)
-                                model = genai.GenerativeModel('gemini-1.5-flash') 
+                                model = genai.GenerativeModel('gemini-3.1-pro-preview') 
                                 
                                 prompt = """
                                 Extract the following from this invoice:
