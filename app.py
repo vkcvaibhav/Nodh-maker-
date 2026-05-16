@@ -737,7 +737,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     for row in top_table.rows:
         row.cells[0].width = Inches(2.0)
         row.cells[1].width = Inches(0.3)
-        row.cells[2].width = Inches(5.4)
+        row.cells[2].width = Inches(4.9)
 
     # Row 1: બજેટ સદર
     add_p2_header_row(top_table.cell(0,0), "બજેટ સદર")
@@ -784,7 +784,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
         
     for row in table.rows:
         row.cells[0].width = Inches(0.4)
-        row.cells[1].width = Inches(7.2)
+        row.cells[1].width = Inches(6.8)
     
     def add_row(idx, no, text, size=11):
         p_no = table.rows[idx].cells[0].paragraphs[0]
