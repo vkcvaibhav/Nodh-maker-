@@ -604,7 +604,7 @@ def set_cell_border(cell, **kwargs):
                 if key in edge_data:
                     element.set(qn('w:{}'.format(key)), str(edge_data[key]))
 
-def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
+def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount_in_guj_words, reg_type, reg_page_no, bill_reg_date, bill_reg_page_no, bill_reg_sr_no):
     doc = Document()
     
     # Strict A4 Margins
@@ -626,8 +626,6 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     style.font._element.append(rFonts)
 
     # --- PAGE 1 ---
-    
-    # Top Section: Rectangular Boxes using a 1x3 Table
     header_table = doc.add_table(rows=1, cols=3)
     header_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     header_table.columns[0].width = Inches(2.0)
@@ -646,67 +644,56 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     
     # Right Box - Voucher & Date
     cell_right = header_table.cell(0, 2)
-    
-    # Voucher No. Line
     p_v1 = cell_right.paragraphs[0]
     run_v1 = p_v1.add_run("Voucher No:-....................")
     run_v1.font.size = Pt(15) 
-    p_v1.paragraph_format.space_before = Pt(6) # <--- Adds space above Voucher No.
-    p_v1.paragraph_format.space_after = Pt(8)  # <--- Adds space between Voucher and Date
+    p_v1.paragraph_format.space_before = Pt(6) 
+    p_v1.paragraph_format.space_after = Pt(8)  
     
-    # Date Line
     p_v2 = cell_right.add_paragraph()
     run_v2 = p_v2.add_run("          Date:-....................")
     run_v2.font.size = Pt(15) 
     p_v2.paragraph_format.space_after = Pt(0)
-    
     set_cell_border(cell_right, top={"sz": 12, "val": "single", "color": "000000"}, bottom={"sz": 12, "val": "single", "color": "000000"}, left={"sz": 12, "val": "single", "color": "000000"}, right={"sz": 12, "val": "single", "color": "000000"})
         
-    # Center Heading 1
     p_col = doc.add_paragraph()
     p_col.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_col.paragraph_format.space_before = Pt(0) 
     p_col.paragraph_format.space_after = Pt(0)
     run_col = p_col.add_run("N. M. COLLEGE OF AGRICULTURE")
     run_col.bold = True
-    run_col.font.size = Pt(22) # <--- Font size for College Name
-    p_col.paragraph_format.space_after = Pt(0)
+    run_col.font.size = Pt(22) 
     
-    # Center Heading 2
     p_uni = doc.add_paragraph()
     p_uni.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_uni = p_uni.add_run("Navsari Agricultural University, Navsari.-396450")
     run_uni.bold = True
-    run_uni.font.size = Pt(20) # <--- Font size for University Name
+    run_uni.font.size = Pt(20) 
     p_uni.paragraph_format.space_after = Pt(10)
     
-    # Bold Border Line under heading
     line_table = doc.add_table(rows=1, cols=1)
     line_table.columns[0].width = Inches(6.7)
     set_cell_border(line_table.cell(0, 0), top={"sz": 24, "val": "single", "color": "000000"})
     
-    # Pushing the Notes section to the bottom 25% of the page
     for _ in range(15): 
         doc.add_paragraph()
 
-    # Bold Border Line above Notes
     line_table_2 = doc.add_table(rows=1, cols=1)
     line_table_2.columns[0].width = Inches(6.7)
     set_cell_border(line_table_2.cell(0, 0), top={"sz": 24, "val": "single", "color": "000000"})
     
-    # Notes Section
     p_note = doc.add_paragraph()
     run_note = p_note.add_run("Note:-")
     run_note.bold = True
-    run_note.font.size = Pt(15) # <--- Font size for "Note:-" heading
+    run_note.font.size = Pt(15) 
     p_note.paragraph_format.space_after = Pt(6)
     
     def add_bullet(num, text, size=15):
         p = doc.add_paragraph()
         run_num = p.add_run(num + "\t")
-        run_num.font.size = Pt(15) # <--- Font size for bullet numbers
+        run_num.font.size = Pt(15) 
         run_text = p.add_run(text)
-        run_text.font.size = Pt(15) # <--- Font size for bullet text
+        run_text.font.size = Pt(15) 
         p.paragraph_format.left_indent = Inches(0.5)
         p.paragraph_format.first_line_indent = Inches(-0.5)
         p.paragraph_format.space_after = Pt(2)
@@ -718,9 +705,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     
     doc.add_page_break()
 
-   # --- PAGE 2 ---
-    
-    # Helper for page 2 header rows to remove spacing
+    # --- PAGE 2 ---
     def add_p2_header_row(cell, text, size=10):
         p = cell.paragraphs[0]
         p.paragraph_format.space_before = Pt(0)
@@ -739,7 +724,6 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
         row.cells[1].width = Inches(0.3)
         row.cells[2].width = Inches(4.9)
 
-    # Row 1: બજેટ સદર
     add_p2_header_row(top_table.cell(0,0), "બજેટ સદર")
     add_p2_header_row(top_table.cell(0,1), ":-")
     
@@ -753,31 +737,26 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     run_exp.font.size = Pt(10)
     run_exp.bold = True
 
-    # Row 2: ફાળવેલ ગ્રાન્ટ
     add_p2_header_row(top_table.cell(1,0), "ફાળવેલ ગ્રાન્ટ વર્ષ: ૨૦  - ૨૦")
     add_p2_header_row(top_table.cell(1,1), ":-")
-    add_p2_header_row(top_table.cell(1,2), f"{grant_year}")
+    add_p2_header_row(top_table.cell(1,2), "                     ") # Blank for manual entry
     
-    # Row 3: બીલની કુલ રકમ
     add_p2_header_row(top_table.cell(2,0), "બીલની કુલ રકમ")
     add_p2_header_row(top_table.cell(2,1), ":-")
     add_p2_header_row(top_table.cell(2,2), f"{float(amount):.2f}") 
     
-    # Row 4: પાર્ટીનું નામ
     add_p2_header_row(top_table.cell(3,0), "ચુકવણું કરવામાં આવનાર પાર્ટીનું નામ\n(અંગ્રેજી કેપીટલ લેટર)")
     add_p2_header_row(top_table.cell(3,1), ":-")
     add_p2_header_row(top_table.cell(3,2), f"{party_name}")
     
-    # Reduced spacing around certificate heading
     p_cert = doc.add_paragraph()
-    p_cert.paragraph_format.space_before = Pt(6) # Minimized gap
-    p_cert.paragraph_format.space_after = Pt(4)  # Minimized gap
+    p_cert.paragraph_format.space_before = Pt(6) 
+    p_cert.paragraph_format.space_after = Pt(4)  
     run_cert = p_cert.add_run(":: પ્રમાણપત્ર ::")
     run_cert.bold = True
     run_cert.font.size = Pt(14)
     p_cert.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    # Certificate Content Table
     table = doc.add_table(rows=9, cols=2)
     table.autofit = False
     table.alignment = WD_TABLE_ALIGNMENT.LEFT
@@ -797,36 +776,42 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
         p_text = table.rows[idx].cells[1].paragraphs[0]
         p_text.paragraph_format.left_indent = Inches(0)
         p_text.paragraph_format.space_before = Pt(0)
-        p_text.paragraph_format.space_after = Pt(2) # Minimized gap between list items
-        p_text.paragraph_format.line_spacing = 1.0  # Force single line spacing
+        p_text.paragraph_format.space_after = Pt(2) 
+        p_text.paragraph_format.line_spacing = 1.0  
         
         run_text = p_text.add_run(text)
         run_text.font.size = Pt(9)
-        
         p_text.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
-    # Applying font size  to all Gujarati certificate rows
+    # DYNAMIC GUJARATI TEXT FILLING
+    cert_2 = "આ બીલમાં જણાવેલ ખર્ચ આ વિભાગની આઇ.સી.એ.આર. યોજના બજેટ સદર ૩૦૩/૨૦૯૨ માં સમાવેશ કરવામાં આવેલ છે."
+    cert_3 = f"બીલમાં દર્શાવેલ માલની ખરીદી બજાર ભાવ તપાસી ભાવો મેળવી સૌથી ઓછા ભાવ મુજબ છે અને સારી સ્થિતિમાં મળેલ છે. જે કચેરીના {reg_type} રજી. પાના નં. {reg_page_no} નાં રોજ જમા કરવામાં આવેલ છે."
+    cert_4 = f"સદર બીલમાં દર્શાવવામાં આવેલ ખર્ચ સેલ્સ ટેક્ષ / એડી.ટેક્ષ / એકસાઇડયુટી / સેન્ટ્રલ ટેક્ષ વિગેરે પાર્ટીના માન્ય થયેલ ભાવ મુજબ ચકાસણી કરવામાં આવેલ છે. અને તે મુજબ પાર્ટીના બીલમાં દર્શાવ્યા મુજબની રકમ રૂ. {amount:.2f}/- (અંકે રૂ. {amount_in_guj_words}) પુરા ચુકવવા ભલામણ કરવામાં આવે છે."
+    cert_8 = f"તા. {bill_reg_date} સદર બીલની નોંધ કચેરી ખાતેના બીલ રજી પાના નં. {bill_reg_page_no} અનુ.નં. {bill_reg_sr_no} કરવામાં આવેલ છે."
+
     add_row(0, "૧.", "આ બીલમાં જણાવેલ વસ્તુ ખરીદવાની/રીપેરીંગના ખર્ચની મંજુરી આપવાની સત્તા ગુજરાત રાજય કૃષિ યુનિવર્સિટીઓ (સતા સોપણી) નિયમ-૨૦૧૧ ના સ્ટેચ્યુટ નં. ૧૨૧ ની આઇટમ નં ____________ મુજબ એનાયત થયેલ સત્તા પ્રમાણે હેડ ઓફિસ/હેડ ઓફ યુનિટ/યુનિ. ઓફિસર્સ/માન. કુલપતિશ્રીની મંજુરી નં: _________________________________________ . તારીખ: ______/______/_________ થી મંજુરી મળેલ છે. હુકમની નકલ સામેલ છે.", size=11)
-    add_row(1, "૨.", f"આ બીલમાં જણાવેલ ખર્ચ આ વિભાગની ____________________________________ .યોજના બજેટ સદર_____________________ .માં સમાવેશ કરવામાં આવેલ છે.", size=11)
-    add_row(2, "૩.", "બીલમાં દર્શાવેલ માલની ખરીદી બજાર ભાવ તપાસી ભાવો મેળવી સૌથી ઓછા ભાવ મુજબ છે અને સારી સ્થિતિમાં મળેલ છે. જે કચેરીના સ્ટોર રોજમેળ રજી પાના નં. ____________../ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ) રજી. પાના નં. ____________ ડેડસ્ટોક રજી. નં.... ____________ / ટેલીફોન રજી. પાના નં ____________ / સ્ટેમ્પ રજી. પાના નં ____________ / સ્ટેશનરી રજી. પાના નં. ____________ .રજીસ્ટરનાં ____________ / પરચુરણ માલ સામાન /.... ____________../ રીપેરીંગ રજી. પાના નં.. ____________ નાં રોજ જમા કરવામાં આવેલ છે.", size=11)
-    add_row(3, "૪.", "સદર બીલમાં દર્શાવવામાં આવેલ ખર્ચ સેલ્સ ટેક્ષ / એડી.ટેક્ષ / એકસાઇડયુટી / સેન્ટ્રલ ટેક્ષ વિગેરે પાર્ટીના માન્ય થયેલ ભાવ મુજબ ચકાસણી કરવામાં આવેલ છે. અને તે મુજબ પાર્ટીના બીલમાં દર્શાવ્યા મુજબની રકમ રૂ. ____________ (અંકે ૩. ____________________________________) પુરા ચુકવવા ભલામણ કરવામાં આવે છે.", size=11)
+    add_row(1, "૨.", cert_2, size=11)
+    add_row(2, "૩.", cert_3, size=11)
+    add_row(3, "૪.", cert_4, size=11)
     add_row(4, "૫.", "બીલમાં દર્શાવેલ મુજબ વાહન નં.... ____________ .ની રીપેરીંગ કામગીરી સંતોષકારક થયેલ છે જેની નોંધ હિસ્ટ્રીશીટ રજી. પાના નં....... ____________ .../ રીપેરીંગ રજી. પાના નં. ____________ થી કરેલ છે. જે ચાલુ નાણાંકીય વર્ષ દરમ્યાન આ બીલ સહીત કુલ ખર્ચ રૂ... ____________./- (અંકે ૩....................................) થયેલ છે.", size=11)
     add_row(5, "૬.", "બીલમાં દર્શાવેલ પેટ્રોલ / ડીઝલ / ઓઇલ વગેરે વાહન નં. ____________ .માટે ખરીદ કરવામાં આવેલ છે જે લોગબુક ભાગ નં. ____________ પાના નં. ____________ થી જમાં કરવામાં આવેલ છે.", size=11)
     add_row(6, "૭.", "તા. ____________ બીલમાં દર્શાવેલ વાહન નં. ____________ ના રીપેરીંગ કામ કરતી વખતે પરત આવેલ જુના સ્પેર પાર્ટસ મેળવીને આ કચેરીનાં રદ્દ રજી. પાના નં. ____________ ના રોજ જમાં લીધેલ છે.", size=11)
-    add_row(7, "૮.", "તા. ____________ સદર બીલની નોંધ કચેરી ખાતેના બીલ રજી પાના નં. ____________ અનુ.નં.............. ........ કરવામાં આવેલ છે.", size=11)
+    add_row(7, "૮.", cert_8, size=11)
     add_row(8, "૯.", "સંશોધન નિયામકશ્રીના ૩૦/૧૦/૨૦૨૧ના પરિપત્રનો અમલ કરેલ છે.", size=11)
-    # --- NEW ADDITION: Centered text below the table ---
+    
     p_special_note = doc.add_paragraph()
     p_special_note.paragraph_format.space_before = Pt(0)
-    p_special_note.paragraph_format.space_after = Pt(2) # Keep it tight so it fits on page
+    p_special_note.paragraph_format.space_after = Pt(2) 
     p_special_note.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_special_note = p_special_note.add_run("સદરહું ખર્ચ કચેરીની અગત્યની કામગીરીને ધ્યાને લઇ તેમજ યુનિવર્સિટીનાં હિતાર્થે કરવામાં આવેલ છે.")
     run_special_note.font.size = Pt(11)
     
+    # Auto fill today's date
+    today_str = datetime.date.today().strftime('%d/%m/%Y')
     p_loc = doc.add_paragraph()
-    p_loc.paragraph_format.space_before = Pt(2) # Small gap before location
+    p_loc.paragraph_format.space_before = Pt(2) 
     p_loc.paragraph_format.space_after = Pt(12)
-    run_loc = p_loc.add_run("સ્થળ : નવસારી\nતારીખ :")
+    run_loc = p_loc.add_run(f"સ્થળ : નવસારી\nતારીખ : {today_str}")
     run_loc.font.size = Pt(12)
     
     table_sig = doc.add_table(rows=1, cols=2)
@@ -850,7 +835,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     p_s2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
     p_passed = doc.add_paragraph()
-    p_passed.paragraph_format.space_before = Pt(20) # Added spacing to act as signature gap
+    p_passed.paragraph_format.space_before = Pt(20) 
     p_passed.paragraph_format.space_after = Pt(6)
     run_passed = p_passed.add_run("Passed for Payment Rs ........................................\nRupees: ........................................................................................")
     run_passed.font.size = Pt(12)
@@ -1175,21 +1160,42 @@ with tab5:
             col_p1, col_p2 = st.columns(2)
             with col_p1:
                 budget_head_pst = st.text_input("Budget Head No.", value="303/2092 (AINP on Agril Acarology)", key="bh_t5")
-                grant_year = st.text_input("ફાળવેલ ગ્રાન્ટ વર્ષ (Grant Year)", value="૨૦૨૫-૨૦૨૬")
+                # ફાળવેલ ગ્રાન્ટ વર્ષ હવે બ્લેન્ક રહે છે જેથી પ્રિન્ટ કાઢીને જાતે લખી શકાય
+                grant_year = st.text_input("ફાળવેલ ગ્રાન્ટ વર્ષ (Grant Year)", value="", placeholder="હાથેથી લખવા માટે ખાલી છોડી દો")
+                party_name_pst = st.text_input("પાર્ટીનું નામ (Party Name)", value=v_name_t5, key="party_t5")
             with col_p2:
                 final_amt_pst = st.number_input("બીલની કુલ રકમ (Amount)", value=float(amt_t5), key="amt_t5")
-                party_name_pst = st.text_input("પાર્ટીનું નામ (Party Name)", value=v_name_t5, key="party_t5")
+                amt_words_guj = st.text_input("રકમ શબ્દોમાં (ગુજરાતીમાં)", placeholder="દા.ત., ત્રણ હજાર નવસો છપ્પન")
+                
+            st.markdown("#### 📝 રજીસ્ટર અને નોંધની વિગતો (Register Details)")
+            col_r1, col_r2 = st.columns(2)
+            with col_r1:
+                reg_type = st.selectbox("કયા રજીસ્ટરમાં નોંધ કરી? (મુદ્દા નં. ૩)", ["ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ)", "ડેડસ્ટોક", "સ્ટોર રોજમેળ", "ટેલીફોન", "સ્ટેમ્પ", "સ્ટેશનરી", "પરચુરણ માલ સામાન", "રીપેરીંગ"])
+                reg_page_no = st.text_input("રજીસ્ટર પાના નં. (Register Page No.)", value="")
+            with col_r2:
+                bill_reg_date = st.date_input("બીલ રજીસ્ટરમાં નોંધની તારીખ (મુદ્દા નં. ૮)", value=datetime.date.today())
+                bill_reg_page_no = st.text_input("બીલ રજી પાના નં. (Bill Reg. Page No.)", value="")
+                bill_reg_sr_no = st.text_input("બીલ રજી અનુ. નં. (Bill Reg. Serial No.)", value="")
                 
             st.markdown("---")
             col_btn_pst1, col_btn_pst2 = st.columns(2)
             
             with col_btn_pst1:
                 if st.button("📑 Generate Exact Bill Pasting Form"):
-                    pst_docx = create_bill_pasting_form(budget_head_pst, grant_year, party_name_pst, final_amt_pst)
-                    st.download_button("Download Pasting Form", data=pst_docx, file_name=f"Pasting_Form_{v_name_t5}.docx")
+                    if not amt_words_guj:
+                        st.error("કૃપા કરીને રકમ શબ્દોમાં (ગુજરાતીમાં) લખો.")
+                    elif not reg_page_no or not bill_reg_page_no or not bill_reg_sr_no:
+                        st.warning("કૃપા કરીને રજીસ્ટરના પાના નંબર અને અનુક્રમ નંબર ભરો.")
+                    else:
+                        bill_reg_date_str = bill_reg_date.strftime("%d/%m/%Y")
+                        pst_docx = create_bill_pasting_form(
+                            budget_head_pst, grant_year, party_name_pst, final_amt_pst, 
+                            amt_words_guj, reg_type, reg_page_no, bill_reg_date_str, 
+                            bill_reg_page_no, bill_reg_sr_no
+                        )
+                        st.download_button("Download Pasting Form", data=pst_docx, file_name=f"Pasting_Form_{v_name_t5}.docx")
             
             with col_btn_pst2:
-                # 3. Mark as Paid
                 if st.button("✅ બિલ પેમેન્ટ પૂરું કરો (Mark as Paid)", key="mark_paid"):
                     mark_po_as_paid(po_id_t5)
                     st.success("ઓર્ડર પેમેન્ટ લિસ્ટમાંથી દૂર કરવામાં આવ્યો છે! રિફ્રેશ કરો.")
