@@ -780,7 +780,8 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     table = doc.add_table(rows=9, cols=2)
     
     # ---> ADD THIS LINE TO FIX LEFT ALIGNMENT FOR CERTIFICATE <---
-    table.alignment = WD_TABLE_ALIGNMENT.LEFT 
+    table.alignment = WD_TABLE_ALIGNMENT.LEFT
+    table.allow_autofit = False
     
     for row in table.rows:
         row.cells[0].width = Inches(0.4)
