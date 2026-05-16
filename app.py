@@ -717,35 +717,14 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     
     doc.add_page_break()
 
-    # --- PAGE 2 ---
-    
-    # Helper for page 2 header rows
-    def add_p2_header_row(cell, text, size=12):
-        p = cell.paragraphs[0]
-        run = p.add_run(text)
-        run.font.size = Pt(10) # <--- Font size for Page 2 top details
-        
-    top_table = doc.add_table(rows=4, cols=3)
-    for row in top_table.rows:
-        row.cells[0].width = Inches(2.0)
-        row.cells[1].width = Inches(0.3)
-        row.cells[2].width = Inches(4.4)
-
-    add_p2_header_row(top_table.cell(0,0), "બજેટ સદર")
-    add_p2_header_row(top_table.cell(0,1), ":-")
-    add_p2_header_row(top_table.cell(0,2), f"{budget_head} \t\tEXP. CODE NO. ____________")
-    
-    add_p2_header_row(top_table.cell(1,0), "ફાળવેલ ગ્રાન્ટ વર્ષ: ૨૦  - ૨૦")
-    add_p2_header_row(top_table.cell(1,1), ":-")
-    add_p2_header_row(top_table.cell(1,2), f"{grant_year}")
-    
-    add_p2_header_row(top_table.cell(2,0), "બીલની કુલ રકમ")
-    add_p2_header_row(top_table.cell(2,1), ":-")
-    add_p2_header_row(top_table.cell(2,2), f"{amount}")
-    
-    add_p2_header_row(top_table.cell(3,0), "ચુકવણું કરવામાં આવનાર પાર્ટીનું નામ\n(અંગ્રેજી કેપીટલ લેટર)")
-    add_p2_header_row(top_table.cell(3,1), ":-")
-    add_p2_header_row(top_table.cell(3,2), f"{party_name}")
+       # Strict A4 Margins
+    section = doc.sections[0]
+    section.page_width = Mm(210)
+    section.page_height = Mm(297)
+    section.left_margin = Inches(0.5)
+    section.right_margin = Inches(0.5)
+    section.top_margin = Inches(0.2)
+    section.bottom_margin = Inches(0.2)
     
     doc.add_paragraph()
     p_cert = doc.add_paragraph()
