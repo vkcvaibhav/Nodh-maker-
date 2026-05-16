@@ -725,7 +725,55 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     section.right_margin = Inches(0.5)
     section.top_margin = Inches(0.2)
     section.bottom_margin = Inches(0.2)
+    # --- PAGE 2 ---
     
+    # Helper for page 2 header rows to remove spacing
+    def add_p2_header_row(cell, text, size=10):
+        p = cell.paragraphs[0]
+        p.paragraph_format.space_before = Pt(0) # <--- Removes top space
+        p.paragraph_format.space_after = Pt(0)  # <--- Removes bottom space
+        run = p.add_run(text)
+        run.font.size = Pt(size)
+        
+    top_table = doc.add_table(rows=4, cols=3)
+    for row in top_table.rows:
+        row.cells[0].width = Inches(2.0)
+        row.cells[1].width = Inches(0.3)
+        row.cells[2].width = Inches(4.4)
+
+    # Row 1: બજેટ સદર
+    add_p2_header_row(top_table.cell(0,0), "બજેટ સદર")
+    add_p2_header_row(top_table.cell(0,1), ":-")
+    
+    # Custom handling for Row 1, Cell 3 to make "EXP. CODE NO." bold
+    p_0_2 = top_table.cell(0,2).paragraphs[0]
+    p_0_2.paragraph_format.space_before = Pt(0)
+    p_0_2.paragraph_format.space_after = Pt(0)
+    
+    run_bh = p_0_2.add_run(f"{budget_head} \t\t")
+    run_bh.font.size = Pt(10)
+    
+    run_exp = p_0_2.add_run("EXP. CODE NO. ____________")
+    run_exp.font.size = Pt(10)
+    run_exp.bold = True # <--- Makes only this part bold
+
+    # Row 2: ફાળવેલ ગ્રાન્ટ
+    add_p2_header_row(top_table.cell(1,0), "ફાળવેલ ગ્રાન્ટ વર્ષ: ૨૦  - ૨૦")
+    add_p2_header_row(top_table.cell(1,1), ":-")
+    add_p2_header_row(top_table.cell(1,2), f"{grant_year}")
+    
+    # Row 3: બીલની કુલ રકમ
+    add_p2_header_row(top_table.cell(2,0), "બીલની કુલ રકમ")
+    add_p2_header_row(top_table.cell(2,1), ":-")
+    
+    # Optional: If your amount is coming in as a long float (e.g., 3956.97000000003), 
+    # you can round it nicely by formatting it like this: f"{float(amount):.2f}"
+    add_p2_header_row(top_table.cell(2,2), f"{amount}") 
+    
+    # Row 4: પાર્ટીનું નામ
+    add_p2_header_row(top_table.cell(3,0), "ચુકવણું કરવામાં આવનાર પાર્ટીનું નામ\n(અંગ્રેજી કેપીટલ લેટર)")
+    add_p2_header_row(top_table.cell(3,1), ":-")
+    add_p2_header_row(top_table.cell(3,2), f"{party_name}")
     doc.add_paragraph()
     p_cert = doc.add_paragraph()
     run_cert = p_cert.add_run(":: પ્રમાણપત્ર ::")
