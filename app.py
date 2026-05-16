@@ -463,11 +463,11 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
     
     # Header logic
     p_header = doc.add_paragraph()
-    # Left part
+    # RIGHT part
     p_header.add_run("No. ACN/ENTO/BILL/       /202\n")
     # Right part
     r_right = p_header.add_run(f"NAVSARI-396450, Date: {datetime.date.today().strftime('%d/%m/%Y')}")
-    p_header.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    p_header.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
     # Custom alignment using spaces to mimic the PDF format strictly
     doc.add_paragraph().paragraph_format.space_after = Pt(10)
