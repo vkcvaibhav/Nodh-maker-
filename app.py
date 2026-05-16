@@ -717,25 +717,24 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     
     doc.add_page_break()
 
-       # Strict A4 Margins
-    section = doc.sections[0]
-    section.page_width = Mm(210)
-    section.page_height = Mm(297)
-    section.left_margin = Inches(0.5)
-    section.right_margin = Inches(0.5)
-    section.top_margin = Inches(0.2)
-    section.bottom_margin = Inches(0.2)
+from docx.enum.table import WD_TABLE_ALIGNMENT
+
     # --- PAGE 2 ---
     
     # Helper for page 2 header rows to remove spacing
     def add_p2_header_row(cell, text, size=10):
         p = cell.paragraphs[0]
-        p.paragraph_format.space_before = Pt(0) # <--- Removes top space
-        p.paragraph_format.space_after = Pt(0)  # <--- Removes bottom space
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.space_after = Pt(0)
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT # Ensure text inside stays left
         run = p.add_run(text)
         run.font.size = Pt(size)
         
     top_table = doc.add_table(rows=4, cols=3)
+    
+    # ---> ADD THIS LINE TO FIX LEFT ALIGNMENT <---
+    top_table.alignment = WD_TABLE_ALIGNMENT.LEFT 
+    
     for row in top_table.rows:
         row.cells[0].width = Inches(2.0)
         row.cells[1].width = Inches(0.3)
@@ -755,7 +754,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     
     run_exp = p_0_2.add_run("EXP. CODE NO. ____________")
     run_exp.font.size = Pt(10)
-    run_exp.bold = True # <--- Makes only this part bold
+    run_exp.bold = True
 
     # Row 2: ફાળવેલ ગ્રાન્ટ
     add_p2_header_row(top_table.cell(1,0), "ફાળવેલ ગ્રાન્ટ વર્ષ: ૨૦  - ૨૦")
@@ -765,25 +764,27 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     # Row 3: બીલની કુલ રકમ
     add_p2_header_row(top_table.cell(2,0), "બીલની કુલ રકમ")
     add_p2_header_row(top_table.cell(2,1), ":-")
-    
-    # Optional: If your amount is coming in as a long float (e.g., 3956.97000000003), 
-    # you can round it nicely by formatting it like this: f"{float(amount):.2f}"
-    add_p2_header_row(top_table.cell(2,2), f"{amount}") 
+    add_p2_header_row(top_table.cell(2,2), f"{float(amount):.2f}") 
     
     # Row 4: પાર્ટીનું નામ
     add_p2_header_row(top_table.cell(3,0), "ચુકવણું કરવામાં આવનાર પાર્ટીનું નામ\n(અંગ્રેજી કેપીટલ લેટર)")
     add_p2_header_row(top_table.cell(3,1), ":-")
     add_p2_header_row(top_table.cell(3,2), f"{party_name}")
+    
     doc.add_paragraph()
     p_cert = doc.add_paragraph()
     run_cert = p_cert.add_run(":: પ્રમાણપત્ર ::")
     run_cert.bold = True
-    run_cert.font.size = Pt(14) # <--- Font size for Certificate Heading
+    run_cert.font.size = Pt(14)
     p_cert.alignment = WD_ALIGN_PARAGRAPH.CENTER
     doc.add_paragraph()
     
     # Certificate Content Table
     table = doc.add_table(rows=9, cols=2)
+    
+    # ---> ADD THIS LINE TO FIX LEFT ALIGNMENT FOR CERTIFICATE <---
+    table.alignment = WD_TABLE_ALIGNMENT.LEFT 
+    
     for row in table.rows:
         row.cells[0].width = Inches(0.4)
         row.cells[1].width = Inches(6.3)
