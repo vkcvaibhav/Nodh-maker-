@@ -717,11 +717,8 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     
     doc.add_page_break()
 
-from docx.enum.table import WD_TABLE_ALIGNMENT
-
     # --- PAGE 2 ---
-    
-    # Helper for page 2 header rows to remove spacing
+        # Helper for page 2 header rows to remove spacing
     def add_p2_header_row(cell, text, size=10):
         p = cell.paragraphs[0]
         p.paragraph_format.space_before = Pt(0)
