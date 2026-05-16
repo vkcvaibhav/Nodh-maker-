@@ -725,14 +725,12 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
         p = cell.paragraphs[0]
         p.paragraph_format.space_before = Pt(0)
         p.paragraph_format.space_after = Pt(0)
-        p.paragraph_format.left_indent = Inches(0)
+        p.paragraph_format.left_indent = Inches(0) 
         p.alignment = WD_ALIGN_PARAGRAPH.LEFT
         run = p.add_run(text)
         run.font.size = Pt(size)
         
     top_table = doc.add_table(rows=4, cols=3)
-    
-    # FIX: Set table autofit to False and force LEFT alignment
     top_table.autofit = False
     top_table.alignment = WD_TABLE_ALIGNMENT.LEFT
         
@@ -745,14 +743,12 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     add_p2_header_row(top_table.cell(0,0), "બજેટ સદર")
     add_p2_header_row(top_table.cell(0,1), ":-")
     
-    # Custom handling for Row 1, Cell 3 to make "EXP. CODE NO." bold
     p_0_2 = top_table.cell(0,2).paragraphs[0]
     p_0_2.paragraph_format.space_before = Pt(0)
     p_0_2.paragraph_format.space_after = Pt(0)
-    
+    p_0_2.paragraph_format.left_indent = Inches(0)
     run_bh = p_0_2.add_run(f"{budget_head} \t\t")
     run_bh.font.size = Pt(10)
-    
     run_exp = p_0_2.add_run("EXP. CODE NO. ____________")
     run_exp.font.size = Pt(10)
     run_exp.bold = True
@@ -772,18 +768,17 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     add_p2_header_row(top_table.cell(3,1), ":-")
     add_p2_header_row(top_table.cell(3,2), f"{party_name}")
     
-    doc.add_paragraph()
+    # Reduced spacing around certificate heading
     p_cert = doc.add_paragraph()
+    p_cert.paragraph_format.space_before = Pt(6) # Minimized gap
+    p_cert.paragraph_format.space_after = Pt(4)  # Minimized gap
     run_cert = p_cert.add_run(":: પ્રમાણપત્ર ::")
     run_cert.bold = True
     run_cert.font.size = Pt(14)
     p_cert.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    doc.add_paragraph()
     
     # Certificate Content Table
     table = doc.add_table(rows=9, cols=2)
-    
-    # FIX: Also set autofit false for the certificate table to ensure alignment
     table.autofit = False
     table.alignment = WD_TABLE_ALIGNMENT.LEFT
         
@@ -793,17 +788,22 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     
     def add_row(idx, no, text, size=11):
         p_no = table.rows[idx].cells[0].paragraphs[0]
-        p_no.paragraph_format.left_indent = Inches(0)
+        p_no.paragraph_format.left_indent = Inches(0) 
+        p_no.paragraph_format.space_before = Pt(0)
+        p_no.paragraph_format.space_after = Pt(0)
         run_no = p_no.add_run(no)
         run_no.font.size = Pt(9)
         
         p_text = table.rows[idx].cells[1].paragraphs[0]
         p_text.paragraph_format.left_indent = Inches(0)
+        p_text.paragraph_format.space_before = Pt(0)
+        p_text.paragraph_format.space_after = Pt(2) # Minimized gap between list items
+        p_text.paragraph_format.line_spacing = 1.0  # Force single line spacing
+        
         run_text = p_text.add_run(text)
         run_text.font.size = Pt(9)
         
         p_text.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        p_text.paragraph_format.space_after = Pt(6)
 
     # Applying font size 11 to all Gujarati certificate rows
     add_row(0, "૧.", "આ બીલમાં જણાવેલ વસ્તુ ખરીદવાની/રીપેરીંગના ખર્ચની મંજુરી આપવાની સત્તા ગુજરાત રાજય કૃષિ યુનિવર્સિટીઓ (સતા સોપણી) નિયમ-૨૦૧૧ ના સ્ટેચ્યુટ નં. ૧૨૧ ની આઇટમ નં ____________ મુજબ એનાયત થયેલ સત્તા પ્રમાણે હેડ ઓફિસ/હેડ ઓફ યુનિટ/યુનિ. ઓફિસર્સ/માન. કુલપતિશ્રીની મંજુરી નં: _________________________________________ . તારીખ: ______/______/_________ થી મંજુરી મળેલ છે. હુકમની નકલ સામેલ છે.", size=11)
@@ -816,36 +816,41 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     add_row(7, "૮.", "તા. ____________ સદર બીલની નોંધ કચેરી ખાતેના બીલ રજી પાના નં. ____________ અનુ.નં.............. ........ કરવામાં આવેલ છે.\nસંશોધન નિયામકશ્રીના ૩૦/૧૦/૨૦૨૧ના પરિપત્રનો અમલ કરેલ છે.", size=11)
     add_row(8, "૯.", "સદરહું ખર્ચ કચેરીની અગત્યની કામગીરીને ધ્યાને લઇ તેમજ યુનિવર્સિટીનાં હિતાર્થે કરવામાં આવેલ છે.", size=11)
     
-    doc.add_paragraph()
-    
     p_loc = doc.add_paragraph()
+    p_loc.paragraph_format.space_before = Pt(6) # Small gap before location
+    p_loc.paragraph_format.space_after = Pt(6)
     run_loc = p_loc.add_run("સ્થળ : નવસારી\nતારીખ :")
     run_loc.font.size = Pt(12)
-    doc.add_paragraph()
     
     table_sig = doc.add_table(rows=1, cols=2)
+    table_sig.alignment = WD_TABLE_ALIGNMENT.LEFT
     for cell in table_sig.rows[0].cells:
         cell.width = Inches(3.4)
     
     p_s1 = table_sig.cell(0,0).paragraphs[0]
+    p_s1.paragraph_format.space_before = Pt(0)
+    p_s1.paragraph_format.space_after = Pt(0)
     run_s1 = p_s1.add_run("પ્રોજેક્ટ ઇનચાર્જની સહી અને હોદ્દો")
     run_s1.bold = True
     run_s1.font.size = Pt(12)
     
     p_s2 = table_sig.cell(0,1).paragraphs[0]
+    p_s2.paragraph_format.space_before = Pt(0)
+    p_s2.paragraph_format.space_after = Pt(0)
     run_s2 = p_s2.add_run("વિભાગીય વડાની સહી અને હોદ્દો")
     run_s2.bold = True
     run_s2.font.size = Pt(12)
     p_s2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
-    doc.add_paragraph("\n")
-    
     p_passed = doc.add_paragraph()
+    p_passed.paragraph_format.space_before = Pt(20) # Added spacing to act as signature gap
+    p_passed.paragraph_format.space_after = Pt(6)
     run_passed = p_passed.add_run("Passed for Payment Rs ........................................\nRupees: ........................................................................................")
     run_passed.font.size = Pt(12)
     
-    doc.add_paragraph()
     p_aao = doc.add_paragraph()
+    p_aao.paragraph_format.space_before = Pt(0)
+    p_aao.paragraph_format.space_after = Pt(0)
     run_aao = p_aao.add_run("Assistant Administrative Officer\nN. M. College of Agriculture\nNavsari-396 450")
     run_aao.bold = True
     run_aao.font.size = Pt(12)
