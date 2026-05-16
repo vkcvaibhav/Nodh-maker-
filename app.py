@@ -390,7 +390,159 @@ def create_docx(content):
     bio = io.BytesIO()
     doc.save(bio)
     return bio.getvalue()
+import os
+from docx.shared import Inches, Pt, Mm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_ALIGN_VERTICAL
+from docx.oxml.shared import OxmlElement
+from docx.oxml.ns import qn
 
+def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_items):
+    doc = Document()
+    
+    # Set margins and orientation (Portrait for Letter)
+    sections = doc.sections
+    for section in sections:
+        section.page_width = Mm(210)
+        section.page_height = Mm(297)
+        section.left_margin = Inches(0.75)
+        section.right_margin = Inches(0.75)
+        section.top_margin = Inches(0.5)
+        section.bottom_margin = Inches(0.5)
+        
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Times New Roman'
+    font.size = Pt(11)
+    
+    # Configure Gujarati Font Support
+    rFonts = OxmlElement('w:rFonts')
+    rFonts.set(qn('w:ascii'), 'Times New Roman')
+    rFonts.set(qn('w:hAnsi'), 'Times New Roman')
+    rFonts.set(qn('w:cs'), 'Shruti')
+    font._element.append(rFonts)
+
+    # --- LETTERHEAD ---
+    # Attempt to add logo if it exists in the github structure
+    logo_path = os.path.join("logos", "nau_logo.png")
+    if os.path.exists(logo_path):
+        p_logo = doc.add_paragraph()
+        p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_logo.add_run().add_picture(logo_path, width=Inches(1.0))
+
+    p_header = doc.add_paragraph()
+    p_header.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_header = p_header.add_run("NAVSARI AGRICULTURAL UNIVERSITY\n")
+    run_header.bold = True
+    run_header.font.size = Pt(14)
+    
+    # Add Department Info Header
+    dept_info = (
+        "ડૉ. જે. જે. પસ્તાગિયા\n"
+        "પ્રાધ્યાપક અને વડા (ઈ/ચા.)\n"
+        "કીટકશાસ્ત્ર વિભાગ\n"
+        "ન. મ. કૃષિ મહાવિદ્યાલય\n"
+        "નવસારી કૃષિ યુનિવર્સિટી\n"
+        "નવસારી- ૩૯૬ ૪૫૦ (ગુજરાત)"
+    )
+    p_dept = doc.add_paragraph(dept_info)
+    p_dept.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+    doc.add_paragraph("_" * 65) # Separator line
+
+    # --- META INFO (Outward No & Date) ---
+    meta_table = doc.add_table(rows=1, cols=2)
+    meta_table.columns[0].width = Inches(4.0)
+    meta_table.columns[1].width = Inches(2.5)
+    
+    cell_left = meta_table.cell(0, 0)
+    cell_left.text = f"જા.નં. એસીએન/એન્ટો/ {out_no} /૨૦૨૬, નવસારી"
+    
+    cell_right = meta_table.cell(0, 1)
+    p_right = cell_right.paragraphs[0]
+    p_right.text = f"તારીખ: {po_date}"
+    p_right.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    doc.add_paragraph() # Spacing
+
+    # --- TO ADDRESS ---
+    doc.add_paragraph("પ્રતિ,").runs[0].bold = True
+    doc.add_paragraph(vendor_name).runs[0].bold = True
+    doc.add_paragraph(vendor_address)
+    
+    doc.add_paragraph() # Spacing
+
+    # --- SUBJECT ---
+    p_subj = doc.add_paragraph()
+    p_subj.add_run("વિષય: ખરીદી હુકમ").bold = True
+    
+    # --- BODY ---
+    p_body = doc.add_paragraph("જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે નિચેની વસ્તુઓ બિલ સહિત રજુ કરવા વિનંતી.")
+    p_body.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    doc.add_paragraph() # Spacing
+
+    # --- ITEMS TABLE ---
+    table = doc.add_table(rows=1, cols=5)
+    table.style = 'Table Grid'
+    
+    # Set headers
+    hdr_cells = table.rows[0].cells
+    headers = ["નં.", "વસ્તુઓના નામ", "જથ્થો", "ભાવ પ્રતિ નંગ", "કુલ રકમ"]
+    for i, header_text in enumerate(headers):
+        hdr_cells[i].text = header_text
+        p = hdr_cells[i].paragraphs[0]
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.runs[0].bold = True
+        hdr_cells[i].vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+
+    # Adjust column widths
+    widths = [Inches(0.5), Inches(3.0), Inches(1.0), Inches(1.0), Inches(1.0)]
+    for i in range(5):
+        table.columns[i].width = widths[i]
+
+    # Add Data Rows
+    total_amount = 0.0
+    for index, row in df_items.iterrows():
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(index + 1)
+        row_cells[1].text = str(row.get('Details', ''))
+        row_cells[2].text = str(row.get('Required Quantity', '')) + " " + str(row.get('Available Pkt/Unit', ''))
+        
+        unit_price = pd.to_numeric(row.get('Unit/Pkt Price', 0), errors='coerce')
+        total_price = pd.to_numeric(row.get('Total Price', 0), errors='coerce')
+        
+        row_cells[3].text = f"{unit_price:.2f}"
+        row_cells[4].text = f"{total_price:.2f}"
+        
+        total_amount += total_price
+        
+        row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Add Total Row
+    total_row = table.add_row().cells
+    total_row[3].text = "Total"
+    total_row[3].paragraphs[0].runs[0].bold = True
+    total_row[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    
+    total_row[4].text = f"{total_amount:.2f}"
+    total_row[4].paragraphs[0].runs[0].bold = True
+    total_row[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    doc.add_paragraph()
+    doc.add_paragraph()
+
+    # --- SIGNATURE ---
+    p_sig = doc.add_paragraph()
+    p_sig.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_sig.add_run("પ્રાધ્યાપક અને વડા\nકીટકશાસ્ત્ર વિભાગ").bold = True
+
+    bio = io.BytesIO()
+    doc.save(bio)
+    return bio.getvalue()
 # ==========================================
 # Streamlit App UI
 # ==========================================
