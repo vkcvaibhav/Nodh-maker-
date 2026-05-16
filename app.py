@@ -749,7 +749,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     p_0_2.paragraph_format.left_indent = Inches(0)
     run_bh = p_0_2.add_run(f"{budget_head} \t\t")
     run_bh.font.size = Pt(10)
-    run_exp = p_0_2.add_run("EXP. CODE NO. ____________")
+    run_exp = p_0_2.add_run("EXP. CODE NO._________")
     run_exp.font.size = Pt(10)
     run_exp.bold = True
 
