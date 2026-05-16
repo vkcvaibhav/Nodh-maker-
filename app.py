@@ -611,10 +611,10 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     section = doc.sections[0]
     section.page_width = Mm(210)
     section.page_height = Mm(297)
-    section.left_margin = Inches(0.8)
-    section.right_margin = Inches(0.8)
-    section.top_margin = Inches(0.8)
-    section.bottom_margin = Inches(0.8)
+    section.left_margin = Inches(0.5)
+    section.right_margin = Inches(0.5)
+    section.top_margin = Inches(0.2)
+    section.bottom_margin = Inches(0.2)
     
     # Set base fonts (Times New Roman / Shruti for Gujarati)
     style = doc.styles['Normal']
@@ -675,7 +675,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     set_cell_border(line_table.cell(0, 0), top={"sz": 24, "val": "single", "color": "000000"})
     
     # Pushing the Notes section to the bottom 25% of the page
-    for _ in range(22): 
+    for _ in range(15): 
         doc.add_paragraph()
 
     # Bold Border Line above Notes
