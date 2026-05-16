@@ -458,23 +458,23 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
     style = doc.styles['Normal']
     font = style.font
     font.name = 'Times New Roman'
-    font.size = Pt(12)
+    font.size = Pt(15)
     style.paragraph_format.space_after = Pt(0)
     
     # Header logic
     p_header = doc.add_paragraph()
     # RIGHT part
-    p_header.add_run("No. ACN/ENTO/BILL/       /202\n")
+    p_header.add_run("No. ACN/ENTO/BILL/       /202\n").bold = True
     # Right part
-    r_right = p_header.add_run(f"NAVSARI-396450, Date: {datetime.date.today().strftime('%d/%m/%Y')}")
+    r_right = p_header.add_run(f"NAVSARI-396450, Date: {datetime.date.today().strftime('%d/%m/%Y')}").bold = True
     p_header.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
     # Custom alignment using spaces to mimic the PDF format strictly
     doc.add_paragraph().paragraph_format.space_after = Pt(10)
     
-    doc.add_paragraph("To,")
-    doc.add_paragraph("The Principal and Dean,")
-    doc.add_paragraph("N.M. College of Agriculture,")
+    doc.add_paragraph("To,").bold = True
+    doc.add_paragraph("The Principal and Dean,").bold = True
+    doc.add_paragraph("N.M. College of Agriculture,").bold = True
     doc.add_paragraph("Navsari").paragraph_format.space_after = Pt(12)
     
     p_sub = doc.add_paragraph()
