@@ -573,7 +573,12 @@ with tab2:
     # --- 1. THE SEARCH BAR ---
     search_query = st.text_input("🔍 Smart Search (Type in English or Gujarati)")
 
-    # Combine both lists (from your database and word docs)
+    # --- 2. FETCH THE DATA ---
+    # Call your database and document functions to actually pull the records
+    db_records = get_archives(month="All", year="All")
+    sample_records = search_sample_nondh(keyword="", month="All", year="All")
+
+    # Now that the variables hold data, you can safely combine them
     all_records = db_records + sample_records
 
     # --- 2. THE GEMINI LOGIC ---
