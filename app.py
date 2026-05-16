@@ -401,7 +401,7 @@ def create_docx(content):
 
 def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_items):
        doc = Document()
-    for section in doc.sections:
+        for section in doc.sections:
         section.top_margin = Inches(0.4)
         section.bottom_margin = Inches(0.5)
         section.left_margin = Inches(0.8)
