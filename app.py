@@ -551,7 +551,7 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
     p_party.add_run("Name of Party for Payment: ").bold = True
     p_party.add_run(party_name)
     
-    doc.add_paragraph().paragraph_format.space_after = Pt(20)
+    doc.add_paragraph().paragraph_format.space_after = Pt(2)
     
     doc.add_paragraph("Encl: Cash/Credit Bill in original")
     doc.add_paragraph(f"No. {bill_no} with entry").paragraph_format.space_after = Pt(20)
