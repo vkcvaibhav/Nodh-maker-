@@ -604,11 +604,12 @@ def set_cell_border(cell, **kwargs):
                 if key in edge_data:
                     element.set(qn('w:{}'.format(key)), str(edge_data[key]))
 
-def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount_in_guj_words, reg_type, reg_page_no, bill_reg_date, bill_reg_page_no, bill_reg_sr_no):
+def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount_in_guj_words, reg_type, reg_page_no, bill_reg_date, bill_reg_page_no, bill_reg_sr_no, item_no, approval_no, approval_date):
     doc = Document()
     
     # --- Helper to convert English digits to Gujarati digits ---
     def eng_to_guj(text):
+        if not text: return ""
         return str(text).translate(str.maketrans("0123456789", "૦૧૨૩૪૫૬૭૮૯"))
 
     # Strict A4 Margins
@@ -740,7 +741,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
 
     add_p2_header_row(top_table.cell(1,0), "ફાળવેલ ગ્રાન્ટ વર્ષ: ૨૦  - ૨૦")
     add_p2_header_row(top_table.cell(1,1), ":-")
-    add_p2_header_row(top_table.cell(1,2), "                     ")
+    add_p2_header_row(top_table.cell(1,2), f"{grant_year}" if grant_year else "                     ")
     
     add_p2_header_row(top_table.cell(2,0), "બીલની કુલ રકમ")
     add_p2_header_row(top_table.cell(2,1), ":-")
@@ -791,6 +792,11 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     guj_bill_reg_sr = eng_to_guj(bill_reg_sr_no)
     guj_bill_date = eng_to_guj(bill_reg_date)
     
+    # New: Convert Approval Details to Gujarati
+    guj_item_no = eng_to_guj(item_no) if item_no else "____________"
+    guj_app_no = eng_to_guj(approval_no) if approval_no else "_________________________________________"
+    guj_app_date = eng_to_guj(approval_date) if approval_date else "______/______/_________"
+
     # --- Register Setup ---
     blanks = {
         "સ્ટોર રોજમેળ": "____________",
@@ -807,6 +813,12 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
         if reg_type in blanks:
             blanks[reg_type] = f" {guj_reg_page} "
 
+    # --- Dynamic Certificates ---
+    cert_1 = (f"આ બીલમાં જણાવેલ વસ્તુ ખરીદવાની/રીપેરીંગના ખર્ચની મંજુરી આપવાની સત્તા ગુજરાત રાજય કૃષિ યુનિવર્સિટીઓ "
+              f"(સતા સોપણી) નિયમ-૨૦૧૧ ના સ્ટેચ્યુટ નં. ૧૨૧ ની આઇટમ નં {guj_item_no} મુજબ એનાયત થયેલ સત્તા પ્રમાણે "
+              f"હેડ ઓફિસ/હેડ ઓફ યુનિટ/યુનિ. ઓફિસર્સ/માન. કુલપતિશ્રીની મંજુરી નં: {guj_app_no} . "
+              f"તારીખ: {guj_app_date} થી મંજુરી મળેલ છે. હુકમની નકલ સામેલ છે.")
+
     cert_2 = "આ બીલમાં જણાવેલ ખર્ચ આ વિભાગની આઇ.સી.એ.આર. યોજના બજેટ સદર ૩૦૩/૨૦૯૨ માં સમાવેશ કરવામાં આવેલ છે."
     
     cert_3 = (
@@ -821,7 +833,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     cert_4 = f"સદર બીલમાં દર્શાવવામાં આવેલ ખર્ચ સેલ્સ ટેક્ષ / એડી.ટેક્ષ / એકસાઇડયુટી / સેન્ટ્રલ ટેક્ષ વિગેરે પાર્ટીના માન્ય થયેલ ભાવ મુજબ ચકાસણી કરવામાં આવેલ છે. અને તે મુજબ પાર્ટીના બીલમાં દર્શાવ્યા મુજબની રકમ રૂ. {guj_amount}/- (અંકે રૂ. {amount_in_guj_words}) પુરા ચુકવવા ભલામણ કરવામાં આવે છે."
     cert_8 = f"તા. {guj_bill_date} સદર બીલની નોંધ કચેરી ખાતેના બીલ રજી પાના નં. {guj_bill_reg_page} અનુ.નં. {guj_bill_reg_sr} કરવામાં આવેલ છે."
 
-    add_row(0, "૧.", "આ બીલમાં જણાવેલ વસ્તુ ખરીદવાની/રીપેરીંગના ખર્ચની મંજુરી આપવાની સત્તા ગુજરાત રાજય કૃષિ યુનિવર્સિટીઓ (સતા સોપણી) નિયમ-૨૦૧૧ ના સ્ટેચ્યુટ નં. ૧૨૧ ની આઇટમ નં ____________ મુજબ એનાયત થયેલ સત્તા પ્રમાણે હેડ ઓફિસ/હેડ ઓફ યુનિટ/યુનિ. ઓફિસર્સ/માન. કુલપતિશ્રીની મંજુરી નં: _________________________________________ . તારીખ: ______/______/_________ થી મંજુરી મળેલ છે. હુકમની નકલ સામેલ છે.", size=11)
+    add_row(0, "૧.", cert_1, size=11)
     add_row(1, "૨.", cert_2, size=11)
     add_row(2, "૩.", cert_3, size=11)
     add_row(3, "૪.", cert_4, size=11)
@@ -1190,7 +1202,6 @@ with tab5:
             with col_p2:
                 final_amt_pst = st.number_input("બીલની કુલ રકમ (Amount)", value=float(amt_t5), key="amt_t5")
                 
-                # AI Auto Fill માટે બે કોલમ
                 col_guj1, col_guj2 = st.columns([3, 1])
                 with col_guj1:
                     amt_words_guj = st.text_input("રકમ શબ્દોમાં (ગુજરાતીમાં)", value=st.session_state.auto_guj_words, placeholder="દા.ત., ત્રણ હજાર નવસો છપ્પન")
@@ -1201,7 +1212,7 @@ with tab5:
                             with st.spinner("અનુવાદ થઈ રહ્યો છે..."):
                                 try:
                                     genai.configure(api_key=api_key)
-                                    model = genai.GenerativeModel('gemini-3.1-pro-preview')
+                                    model = genai.GenerativeModel('gemini-1.5-flash')
                                     prompt = f"Translate the number {final_amt_pst} into Gujarati words. Return ONLY the Gujarati translation. Example: for 3956 return 'ત્રણ હજાર નવસો છપ્પન'."
                                     res = model.generate_content(prompt)
                                     st.session_state.auto_guj_words = res.text.strip()
@@ -1210,8 +1221,17 @@ with tab5:
                                     st.error("AI Error.")
                         else:
                             st.warning("API Key is required!")
+                            
+            st.markdown("#### 📝 મંજુરીની વિગતો (Approval Details - મુદ્દા નં. ૧)")
+            col_a1, col_a2, col_a3 = st.columns(3)
+            with col_a1:
+                item_no_pst = st.text_input("આઇટમ નં. (Item No.)", value="", placeholder="દા.ત. 14")
+            with col_a2:
+                approval_no_pst = st.text_input("મંજુરી નં. (Approval No.)", value="", placeholder="દા.ત. ACN/123/2026")
+            with col_a3:
+                approval_date_pst = st.text_input("મંજુરી તારીખ (Approval Date)", value="", placeholder="DD/MM/YYYY")
                 
-            st.markdown("#### 📝 રજીસ્ટર અને નોંધની વિગતો (Register Details)")
+            st.markdown("#### 📝 રજીસ્ટર અને નોંધની વિગતો (Register Details - મુદ્દા નં. ૩ અને ૮)")
             col_r1, col_r2 = st.columns(2)
             with col_r1:
                 reg_type = st.selectbox("કયા રજીસ્ટરમાં નોંધ કરી? (મુદ્દા નં. ૩)", ["ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ)", "ડેડસ્ટોક", "સ્ટોર રોજમેળ", "ટેલીફોન", "સ્ટેમ્પ", "સ્ટેશનરી", "પરચુરણ માલ સામાન", "રીપેરીંગ"])
@@ -1232,10 +1252,12 @@ with tab5:
                         st.warning("કૃપા કરીને રજીસ્ટરના પાના નંબર અને અનુક્રમ નંબર ભરો.")
                     else:
                         bill_reg_date_str = bill_reg_date.strftime("%d/%m/%Y")
+                        
+                        # Added new parameters to function call
                         pst_docx = create_bill_pasting_form(
                             budget_head_pst, grant_year, party_name_pst, final_amt_pst, 
                             amt_words_guj, reg_type, reg_page_no, bill_reg_date_str, 
-                            bill_reg_page_no, bill_reg_sr_no
+                            bill_reg_page_no, bill_reg_sr_no, item_no_pst, approval_no_pst, approval_date_pst
                         )
                         st.download_button("Download Pasting Form", data=pst_docx, file_name=f"Pasting_Form_{v_name_t5}.docx")
             
