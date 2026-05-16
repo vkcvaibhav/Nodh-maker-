@@ -10,21 +10,20 @@ import urllib.request
 import requests
 import pandas as pd
 import re
+import os
 
 # Word Document Generation Imports
 from docx import Document
-from docx.shared import Mm, Pt
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Mm, Pt, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
+from docx.enum.table import WD_ALIGN_VERTICAL
+from docx.enum.section import WD_ORIENTATION
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-import os
-from docx.shared import Inches, Pt
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_ALIGN_VERTICAL
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
-from docx.enum.section import WD_ORIENTATION
-from docx.oxml.shared import OxmlElement
-from docx.oxml.ns import qn
+
+# Define global logo paths
+NAU_LOGO = "logos/nau_logo.png"
+ICAR_LOGO = "logos/icar_logo.png"
 
 # ==========================================
 # Database Setup for Archiving
@@ -234,6 +233,21 @@ def df_to_markdown_with_total(df):
     return markdown
 
 # ==========================================
+# Document Generation Helper Functions
+# ==========================================
+def add_bottom_border(paragraph, size='24'):
+    """Helper function to add a bottom border to a Word paragraph"""
+    pPr = paragraph._p.get_or_add_pPr()
+    pBdr = OxmlElement('w:pBdr')
+    bottom = OxmlElement('w:bottom')
+    bottom.set(qn('w:val'), 'single')
+    bottom.set(qn('w:sz'), size)
+    bottom.set(qn('w:space'), '1')
+    bottom.set(qn('w:color'), 'auto')
+    pBdr.append(bottom)
+    pPr.append(pBdr)
+
+# ==========================================
 # Document Generation (A4 Portrait - 20:80 Split)
 # ==========================================
 def create_docx(content):
@@ -400,8 +414,8 @@ def create_docx(content):
     return bio.getvalue()
 
 def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_items):
-       doc = Document()
-        for section in doc.sections:
+    doc = Document()
+    for section in doc.sections:
         section.top_margin = Inches(0.4)
         section.bottom_margin = Inches(0.5)
         section.left_margin = Inches(0.8)
@@ -476,14 +490,14 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     add_bottom_border(p_thick2, size='24')
     
     # Dynamically grab the year from the date for the ref no
-    letter_year = letter_date.split('/')[-1] if '/' in letter_date else "૨૦૨૬"
+    letter_year = po_date.split('/')[-1] if '/' in po_date else (po_date.split('.')[-1] if '.' in po_date else "૨૦૨૬")
     
     table3 = doc.add_table(rows=1, cols=2)
     p_ref = table3.cell(0,0).paragraphs[0]
-    p_ref.add_run(f"જા.નં. એસીએન/એન્ટો/એઆઈએનપી-એએ/{ref_no}/{letter_year}, નવસારી")
+    p_ref.add_run(f"જા.નં. એસીએન/એન્ટો/એઆઈએનપી-એએ/{out_no}/{letter_year}, નવસારી")
     p_date = table3.cell(0,1).paragraphs[0]
     p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    p_date.add_run(f"તારીખ: {letter_date}")
+    p_date.add_run(f"તારીખ: {po_date}")
             
     doc.add_paragraph().paragraph_format.space_after = Pt(6)
     
@@ -565,6 +579,7 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     bio = io.BytesIO()
     doc.save(bio)
     return bio.getvalue()
+
 # ==========================================
 # Streamlit App UI
 # ==========================================
