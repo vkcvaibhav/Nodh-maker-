@@ -586,7 +586,7 @@ with tab2:
         if not query.strip():
             return records
         
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-3.1-pro-preview')
         
         records_context = ""
         for i, record in enumerate(records):
