@@ -1212,7 +1212,7 @@ with tab5:
                             with st.spinner("અનુવાદ થઈ રહ્યો છે..."):
                                 try:
                                     genai.configure(api_key=api_key)
-                                    model = genai.GenerativeModel('gemini-1.5-flash')
+                                    model = genai.GenerativeModel('gemini-3.1-pro-preview')
                                     prompt = f"Translate the number {final_amt_pst} into Gujarati words. Return ONLY the Gujarati translation. Example: for 3956 return 'ત્રણ હજાર નવસો છપ્પન'."
                                     res = model.generate_content(prompt)
                                     st.session_state.auto_guj_words = res.text.strip()
