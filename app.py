@@ -615,6 +615,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     section.right_margin = Inches(0.5)
     section.top_margin = Inches(0.2)
     section.bottom_margin = Inches(0.2)
+    section.gutter = Inches(0)
     
     # Set base fonts (Times New Roman / Shruti for Gujarati)
     style = doc.styles['Normal']
@@ -724,6 +725,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
         p = cell.paragraphs[0]
         p.paragraph_format.space_before = Pt(0)
         p.paragraph_format.space_after = Pt(0)
+        p.paragraph_format.left_indent = Inches(0)
         p.alignment = WD_ALIGN_PARAGRAPH.LEFT
         run = p.add_run(text)
         run.font.size = Pt(size)
@@ -791,10 +793,12 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     
     def add_row(idx, no, text, size=11):
         p_no = table.rows[idx].cells[0].paragraphs[0]
+        p_no.paragraph_format.left_indent = Inches(0)
         run_no = p_no.add_run(no)
         run_no.font.size = Pt(9)
         
         p_text = table.rows[idx].cells[1].paragraphs[0]
+        p_text.paragraph_format.left_indent = Inches(0)
         run_text = p_text.add_run(text)
         run_text.font.size = Pt(9)
         
