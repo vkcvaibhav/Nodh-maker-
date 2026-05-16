@@ -399,7 +399,7 @@ st.title("સાદર નોંધ જનરેટર (Intelligent Sadar Nondh 
 
 api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
 
-tab1, tab2, tab3 = st.tabs(["નવી સાદર નોંધ (Create)", "જુની નોંધ (Archives)", "ડેટા સિંક (Data Sync)"])
+tab1, tab2, tab3 = st.tabs(["નવી સાદર નોંધ (Create)", "જુની નોંધ (Archives)", "ખરીદી હુકમ (Purchase Order)"])
 
 with tab1:
     st.markdown("### જરૂરિયાતની વિગત આપો (Provide Requirements)")
@@ -664,9 +664,55 @@ with tab2:
         st.info("કોઈ રેકોર્ડ મળેલ નથી (No matching records found).")
 
 with tab3:
-    st.markdown("### ડેટા સિંક (GitHub Data Sync)")
-    st.info("હવે તમારી ફાઇલો સીધી તમારા ગિટહબ (vkcvaibhav-eng/-) પરથી લેવામાં આવે છે.")
+    st.markdown("### 📝 ખરીદી હુકમ બનાવો (Generate Purchase Order)")
+    st.info("નોંધ મંજૂર થયા પછી સપ્લાયરને ખરીદીનો ઓર્ડર મોકલવા માટે અહીં વિગતો ભરો.")
     
-    if st.button("🔄 Refresh Data from GitHub"):
-        load_permanent_context.clear()
-        st.success("કેશ (Cache) સાફ થઈ ગઈ છે!")
+    col_po1, col_po2 = st.columns(2)
+    
+    with col_po1:
+        vendor_name = st.text_input("સપ્લાયરનું નામ (Vendor Name)", value="DUTT ENTERPRISE")
+        outward_no = st.text_input("જાવક નંબર (Outward No.)", value="139")
+    
+    with col_po2:
+        vendor_address = st.text_area("સપ્લાયરનું સરનામું (Vendor Address)", value="A/5, Krishna complex, borsad chokadi,\nAnand sojitra road, Anand 388 001", height=110)
+        po_date = st.date_input("તારીખ (Date)", value=datetime.date.today())
+        
+    st.markdown("#### ખરીદીની વસ્તુઓ (Items to Purchase)")
+    
+    # Try to load the dataframe from Tab 1 if it exists so the user doesn't have to re-type
+    default_df = pd.DataFrame(columns=["Details", "Required Quantity", "Available Pkt/Unit", "Unit/Pkt Price", "Total Price"])
+    
+    if 'generated_nondh' in st.session_state:
+        _, session_df, _ = parse_markdown_to_parts(st.session_state['generated_nondh'])
+        if not session_df.empty:
+            default_df = session_df
+            st.success("Tab 1 માંથી વસ્તુઓ આપમેળે લેવામાં આવી છે! (Items imported from Tab 1)")
+            
+    po_df = st.data_editor(default_df, num_rows="dynamic", use_container_width=True, key="po_editor")
+    
+    if st.button("📄 ખરીદી હુકમ ડાઉનલોડ કરો (Download PO)"):
+        if vendor_name and not po_df.empty:
+            try:
+                # Format the date nicely for the letter
+                formatted_date = po_date.strftime("%d.%m.%Y")
+                
+                # Generate Document
+                po_docx = create_purchase_order_docx(
+                    vendor_name=vendor_name,
+                    vendor_address=vendor_address,
+                    out_no=outward_no,
+                    po_date=formatted_date,
+                    df_items=po_df
+                )
+                
+                st.download_button(
+                    label="Download Purchase Order (DOCX)",
+                    data=po_docx,
+                    file_name=f"Purchase_Order_{vendor_name.replace(' ', '_')}_{formatted_date}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+                st.success("ખરીદી હુકમ તૈયાર છે! ડાઉનલોડ બટન પર ક્લિક કરો.")
+            except Exception as e:
+                st.error(f"Error generating document: {e}")
+        else:
+            st.warning("કૃપા કરીને સપ્લાયરનું નામ અને વસ્તુઓની વિગત ઉમેરો.")
