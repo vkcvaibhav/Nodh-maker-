@@ -576,6 +576,34 @@ def set_cell_border(cell, **kwargs):
                 if key in edge_data:
                     element.set(qn('w:{}'.format(key)), str(edge_data[key]))
 
+import io
+from docx import Document
+from docx.shared import Inches, Pt, Mm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+
+def set_cell_border(cell, **kwargs):
+    """Helper function to draw borders around specific table cells."""
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    tcBorders = tcPr.first_child_found_in("w:tcBorders")
+    if tcBorders is None:
+        tcBorders = OxmlElement('w:tcBorders')
+        tcPr.append(tcBorders)
+    for edge in ('top', 'left', 'bottom', 'right'):
+        edge_data = kwargs.get(edge)
+        if edge_data:
+            tag = 'w:{}'.format(edge)
+            element = tcBorders.find(qn(tag))
+            if element is None:
+                element = OxmlElement(tag)
+                tcBorders.append(element)
+            for key in ["sz", "val", "color", "space", "shadow"]:
+                if key in edge_data:
+                    element.set(qn('w:{}'.format(key)), str(edge_data[key]))
+
 def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     doc = Document()
     
@@ -588,62 +616,57 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     section.top_margin = Inches(0.8)
     section.bottom_margin = Inches(0.8)
     
+    # Set base fonts (Times New Roman / Shruti for Gujarati)
     style = doc.styles['Normal']
-    font = style.font
-    font.name = 'Times New Roman'
-    font.size = Pt(11)
     rFonts = OxmlElement('w:rFonts')
     rFonts.set(qn('w:ascii'), 'Times New Roman')
     rFonts.set(qn('w:hAnsi'), 'Times New Roman')
     rFonts.set(qn('w:cs'), 'Shruti')
-    font._element.append(rFonts)
+    style.font._element.append(rFonts)
 
     # --- PAGE 1 ---
     
-    # Top Section: Rectangular Boxes using a 1x3 Table (Left Box, Middle Space, Right Box)
+    # Top Section: Rectangular Boxes using a 1x3 Table
     header_table = doc.add_table(rows=1, cols=3)
     header_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     header_table.columns[0].width = Inches(2.0)
     header_table.columns[1].width = Inches(2.7) # Spacer
     header_table.columns[2].width = Inches(2.0)
     
-    # Left Box
+    # Left Box - Office No
     cell_left = header_table.cell(0, 0)
     p_office = cell_left.paragraphs[0]
-    p_office.add_run("Office No. 303").bold = True
+    run_office = p_office.add_run("Office No. 303")
+    run_office.bold = True
+    run_office.font.size = Pt(12) # <--- Font size for Office No
     p_office.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    set_cell_border(cell_left, 
-                    top={"sz": 12, "val": "single", "color": "000000"},
-                    bottom={"sz": 12, "val": "single", "color": "000000"},
-                    left={"sz": 12, "val": "single", "color": "000000"},
-                    right={"sz": 12, "val": "single", "color": "000000"})
+    set_cell_border(cell_left, top={"sz": 12, "val": "single", "color": "000000"}, bottom={"sz": 12, "val": "single", "color": "000000"}, left={"sz": 12, "val": "single", "color": "000000"}, right={"sz": 12, "val": "single", "color": "000000"})
     
-    # Right Box
+    # Right Box - Voucher & Date
     cell_right = header_table.cell(0, 2)
     p_voucher = cell_right.paragraphs[0]
-    p_voucher.add_run("Voucher No. ........................")
-    p_voucher.add_run("\nDate....................................")
-    set_cell_border(cell_right, 
-                    top={"sz": 12, "val": "single", "color": "000000"},
-                    bottom={"sz": 12, "val": "single", "color": "000000"},
-                    left={"sz": 12, "val": "single", "color": "000000"},
-                    right={"sz": 12, "val": "single", "color": "000000"})
+    run_v1 = p_voucher.add_run("Voucher No. ........................")
+    run_v1.font.size = Pt(11) # <--- Font size for Voucher No
+    run_v2 = p_voucher.add_run("\nDate....................................")
+    run_v2.font.size = Pt(11) # <--- Font size for Date
+    set_cell_border(cell_right, top={"sz": 12, "val": "single", "color": "000000"}, bottom={"sz": 12, "val": "single", "color": "000000"}, left={"sz": 12, "val": "single", "color": "000000"}, right={"sz": 12, "val": "single", "color": "000000"})
 
     doc.add_paragraph() # Spacer
     
-    # Center Heading (Font Size 15-16)
+    # Center Heading 1
     p_col = doc.add_paragraph()
     p_col.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_col = p_col.add_run("N. M. COLLEGE OF AGRICULTURE.")
     run_col.bold = True
-    run_col.font.size = Pt(16)
+    run_col.font.size = Pt(16) # <--- Font size for College Name
     p_col.paragraph_format.space_after = Pt(0)
     
+    # Center Heading 2
     p_uni = doc.add_paragraph()
     p_uni.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_uni = p_uni.add_run("Navsari Agricultural University, Navsari.-396450")
     run_uni.bold = True
-    run_uni.font.size = Pt(15)
+    run_uni.font.size = Pt(14) # <--- Font size for University Name
     p_uni.paragraph_format.space_after = Pt(10)
     
     # Bold Border Line under heading
@@ -660,59 +683,66 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     line_table_2.columns[0].width = Inches(6.7)
     set_cell_border(line_table_2.cell(0, 0), top={"sz": 24, "val": "single", "color": "000000"})
     
-    p_note = doc.add_paragraph("Note:-")
-    p_note.runs[0].bold = True
+    # Notes Section
+    p_note = doc.add_paragraph()
+    run_note = p_note.add_run("Note:-")
+    run_note.bold = True
+    run_note.font.size = Pt(11) # <--- Font size for "Note:-" heading
     p_note.paragraph_format.space_after = Pt(6)
     
-    def add_bullet(num, text):
+    def add_bullet(num, text, size=10):
         p = doc.add_paragraph()
-        p.add_run(num + "\t").bold = False
-        p.add_run(text)
+        run_num = p.add_run(num + "\t")
+        run_num.font.size = Pt(size) # <--- Font size for bullet numbers
+        run_text = p.add_run(text)
+        run_text.font.size = Pt(size) # <--- Font size for bullet text
         p.paragraph_format.left_indent = Inches(0.5)
         p.paragraph_format.first_line_indent = Inches(-0.5)
         p.paragraph_format.space_after = Pt(2)
         
-    add_bullet("1.", "Quotation from at least three parties for purchase above Rs. 1000/- should be obtained.")
-    add_bullet("2.", "Purchase from authorized details and manufactures be certified on bill no other quotation were available due of purchase from manufacture or authorized dealers.")
-    add_bullet("3.", "A special previous sanction of V.C of campus, Navsari should invariably be obtained for dead stock of other valuable articles before the purchase is made.")
-    add_bullet("4.", "Purchase is made in the interested of University work.")
+    add_bullet("1.", "Quotation from at least three parties for purchase above Rs. 1000/- should be obtained.", size=10)
+    add_bullet("2.", "Purchase from authorized details and manufactures be certified on bill no other quotation were available due of purchase from manufacture or authorized dealers.", size=10)
+    add_bullet("3.", "A special previous sanction of V.C of campus, Navsari should invariably be obtained for dead stock of other valuable articles before the purchase is made.", size=10)
+    add_bullet("4.", "Purchase is made in the interested of University work.", size=10)
     
     doc.add_page_break()
 
     # --- PAGE 2 ---
     
-    # Top Details in a Table Format
+    # Helper for page 2 header rows
+    def add_p2_header_row(cell, text, size=12):
+        p = cell.paragraphs[0]
+        run = p.add_run(text)
+        run.font.size = Pt(size) # <--- Font size for Page 2 top details
+        
     top_table = doc.add_table(rows=4, cols=3)
     for row in top_table.rows:
         row.cells[0].width = Inches(2.0)
         row.cells[1].width = Inches(0.3)
         row.cells[2].width = Inches(4.4)
 
-    # Row 1
-    top_table.cell(0,0).text = "બજેટ સદર"
-    top_table.cell(0,1).text = ":-"
-    top_table.cell(0,2).text = f"{budget_head} \t\tEXP. CODE NO. ____________"
+    add_p2_header_row(top_table.cell(0,0), "બજેટ સદર")
+    add_p2_header_row(top_table.cell(0,1), ":-")
+    add_p2_header_row(top_table.cell(0,2), f"{budget_head} \t\tEXP. CODE NO. ____________")
     
-    # Row 2
-    top_table.cell(1,0).text = "ફાળવેલ ગ્રાન્ટ વર્ષ: ૨૦  - ૨૦"
-    top_table.cell(1,1).text = ":-"
-    top_table.cell(1,2).text = f"{grant_year}"
+    add_p2_header_row(top_table.cell(1,0), "ફાળવેલ ગ્રાન્ટ વર્ષ: ૨૦  - ૨૦")
+    add_p2_header_row(top_table.cell(1,1), ":-")
+    add_p2_header_row(top_table.cell(1,2), f"{grant_year}")
     
-    # Row 3
-    top_table.cell(2,0).text = "બીલની કુલ રકમ"
-    top_table.cell(2,1).text = ":-"
-    top_table.cell(2,2).text = f"{amount}"
+    add_p2_header_row(top_table.cell(2,0), "બીલની કુલ રકમ")
+    add_p2_header_row(top_table.cell(2,1), ":-")
+    add_p2_header_row(top_table.cell(2,2), f"{amount}")
     
-    # Row 4
-    top_table.cell(3,0).text = "ચુકવણું કરવામાં આવનાર પાર્ટીનું નામ\n(અંગ્રેજી કેપીટલ લેટર)"
-    top_table.cell(3,1).text = ":-"
-    top_table.cell(3,2).text = f"{party_name}"
+    add_p2_header_row(top_table.cell(3,0), "ચુકવણું કરવામાં આવનાર પાર્ટીનું નામ\n(અંગ્રેજી કેપીટલ લેટર)")
+    add_p2_header_row(top_table.cell(3,1), ":-")
+    add_p2_header_row(top_table.cell(3,2), f"{party_name}")
     
     doc.add_paragraph()
-    p_cert = doc.add_paragraph(":: પ્રમાણપત્ર ::")
+    p_cert = doc.add_paragraph()
+    run_cert = p_cert.add_run(":: પ્રમાણપત્ર ::")
+    run_cert.bold = True
+    run_cert.font.size = Pt(14) # <--- Font size for Certificate Heading
     p_cert.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_cert.runs[0].bold = True
-    p_cert.runs[0].font.size = Pt(14)
     doc.add_paragraph()
     
     # Certificate Content Table
@@ -721,24 +751,34 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
         row.cells[0].width = Inches(0.4)
         row.cells[1].width = Inches(6.3)
     
-    def add_row(idx, no, text):
-        table.rows[idx].cells[0].text = no
-        table.rows[idx].cells[1].text = text
-        table.rows[idx].cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        table.rows[idx].cells[1].paragraphs[0].paragraph_format.space_after = Pt(6)
+    def add_row(idx, no, text, size=11):
+        p_no = table.rows[idx].cells[0].paragraphs[0]
+        run_no = p_no.add_run(no)
+        run_no.font.size = Pt(size) # <--- Font size for Gujarati numbers
+        
+        p_text = table.rows[idx].cells[1].paragraphs[0]
+        run_text = p_text.add_run(text)
+        run_text.font.size = Pt(size) # <--- Font size for Gujarati body text
+        
+        p_text.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p_text.paragraph_format.space_after = Pt(6)
 
-    add_row(0, "૧.", "આ બીલમાં જણાવેલ વસ્તુ ખરીદવાની/રીપેરીંગના ખર્ચની મંજુરી આપવાની સત્તા ગુજરાત રાજય કૃષિ યુનિવર્સિટીઓ (સતા સોપણી) નિયમ-૨૦૧૧ ના સ્ટેચ્યુટ નં. ૧૨૧ ની આઇટમ નં ____________ મુજબ એનાયત થયેલ સત્તા પ્રમાણે હેડ ઓફિસ/હેડ ઓફ યુનિટ/યુનિ. ઓફિસર્સ/માન. કુલપતિશ્રીની મંજુરી નં: _________________________________________ . તારીખ: ______/______/_________ થી મંજુરી મળેલ છે. હુકમની નકલ સામેલ છે.")
-    add_row(1, "૨.", f"આ બીલમાં જણાવેલ ખર્ચ આ વિભાગની ____________________________________ .યોજના બજેટ સદર_____________________ .માં સમાવેશ કરવામાં આવેલ છે.")
-    add_row(2, "૩.", "બીલમાં દર્શાવેલ માલની ખરીદી બજાર ભાવ તપાસી ભાવો મેળવી સૌથી ઓછા ભાવ મુજબ છે અને સારી સ્થિતિમાં મળેલ છે. જે કચેરીના સ્ટોર રોજમેળ રજી પાના નં. ____________../ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ) રજી. પાના નં. ____________ ડેડસ્ટોક રજી. નં.... ____________ / ટેલીફોન રજી. પાના નં ____________ / સ્ટેમ્પ રજી. પાના નં ____________ / સ્ટેશનરી રજી. પાના નં. ____________ .રજીસ્ટરનાં ____________ / પરચુરણ માલ સામાન /.... ____________../ રીપેરીંગ રજી. પાના નં.. ____________ નાં રોજ જમા કરવામાં આવેલ છે.")
-    add_row(3, "૪.", "સદર બીલમાં દર્શાવવામાં આવેલ ખર્ચ સેલ્સ ટેક્ષ / એડી.ટેક્ષ / એકસાઇડયુટી / સેન્ટ્રલ ટેક્ષ વિગેરે પાર્ટીના માન્ય થયેલ ભાવ મુજબ ચકાસણી કરવામાં આવેલ છે. અને તે મુજબ પાર્ટીના બીલમાં દર્શાવ્યા મુજબની રકમ રૂ. ____________ (અંકે ૩. ____________________________________) પુરા ચુકવવા ભલામણ કરવામાં આવે છે.")
-    add_row(4, "૫.", "બીલમાં દર્શાવેલ મુજબ વાહન નં.... ____________ .ની રીપેરીંગ કામગીરી સંતોષકારક થયેલ છે જેની નોંધ હિસ્ટ્રીશીટ રજી. પાના નં....... ____________ .../ રીપેરીંગ રજી. પાના નં. ____________ થી કરેલ છે. જે ચાલુ નાણાંકીય વર્ષ દરમ્યાન આ બીલ સહીત કુલ ખર્ચ રૂ... ____________./- (અંકે ૩....................................) થયેલ છે.")
-    add_row(5, "૬.", "બીલમાં દર્શાવેલ પેટ્રોલ / ડીઝલ / ઓઇલ વગેરે વાહન નં. ____________ .માટે ખરીદ કરવામાં આવેલ છે જે લોગબુક ભાગ નં. ____________ પાના નં. ____________ થી જમાં કરવામાં આવેલ છે.")
-    add_row(6, "૭.", "તા. ____________ બીલમાં દર્શાવેલ વાહન નં. ____________ ના રીપેરીંગ કામ કરતી વખતે પરત આવેલ જુના સ્પેર પાર્ટસ મેળવીને આ કચેરીનાં રદ્દ રજી. પાના નં. ____________ ના રોજ જમાં લીધેલ છે.")
-    add_row(7, "૮.", "તા. ____________ સદર બીલની નોંધ કચેરી ખાતેના બીલ રજી પાના નં. ____________ અનુ.નં.............. ........ કરવામાં આવેલ છે.\nસંશોધન નિયામકશ્રીના ૩૦/૧૦/૨૦૨૧ના પરિપત્રનો અમલ કરેલ છે.")
-    add_row(8, "૯.", "સદરહું ખર્ચ કચેરીની અગત્યની કામગીરીને ધ્યાને લઇ તેમજ યુનિવર્સિટીનાં હિતાર્થે કરવામાં આવેલ છે.")
+    # Applying font size 11 to all Gujarati certificate rows
+    add_row(0, "૧.", "આ બીલમાં જણાવેલ વસ્તુ ખરીદવાની/રીપેરીંગના ખર્ચની મંજુરી આપવાની સત્તા ગુજરાત રાજય કૃષિ યુનિવર્સિટીઓ (સતા સોપણી) નિયમ-૨૦૧૧ ના સ્ટેચ્યુટ નં. ૧૨૧ ની આઇટમ નં ____________ મુજબ એનાયત થયેલ સત્તા પ્રમાણે હેડ ઓફિસ/હેડ ઓફ યુનિટ/યુનિ. ઓફિસર્સ/માન. કુલપતિશ્રીની મંજુરી નં: _________________________________________ . તારીખ: ______/______/_________ થી મંજુરી મળેલ છે. હુકમની નકલ સામેલ છે.", size=11)
+    add_row(1, "૨.", f"આ બીલમાં જણાવેલ ખર્ચ આ વિભાગની ____________________________________ .યોજના બજેટ સદર_____________________ .માં સમાવેશ કરવામાં આવેલ છે.", size=11)
+    add_row(2, "૩.", "બીલમાં દર્શાવેલ માલની ખરીદી બજાર ભાવ તપાસી ભાવો મેળવી સૌથી ઓછા ભાવ મુજબ છે અને સારી સ્થિતિમાં મળેલ છે. જે કચેરીના સ્ટોર રોજમેળ રજી પાના નં. ____________../ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ) રજી. પાના નં. ____________ ડેડસ્ટોક રજી. નં.... ____________ / ટેલીફોન રજી. પાના નં ____________ / સ્ટેમ્પ રજી. પાના નં ____________ / સ્ટેશનરી રજી. પાના નં. ____________ .રજીસ્ટરનાં ____________ / પરચુરણ માલ સામાન /.... ____________../ રીપેરીંગ રજી. પાના નં.. ____________ નાં રોજ જમા કરવામાં આવેલ છે.", size=11)
+    add_row(3, "૪.", "સદર બીલમાં દર્શાવવામાં આવેલ ખર્ચ સેલ્સ ટેક્ષ / એડી.ટેક્ષ / એકસાઇડયુટી / સેન્ટ્રલ ટેક્ષ વિગેરે પાર્ટીના માન્ય થયેલ ભાવ મુજબ ચકાસણી કરવામાં આવેલ છે. અને તે મુજબ પાર્ટીના બીલમાં દર્શાવ્યા મુજબની રકમ રૂ. ____________ (અંકે ૩. ____________________________________) પુરા ચુકવવા ભલામણ કરવામાં આવે છે.", size=11)
+    add_row(4, "૫.", "બીલમાં દર્શાવેલ મુજબ વાહન નં.... ____________ .ની રીપેરીંગ કામગીરી સંતોષકારક થયેલ છે જેની નોંધ હિસ્ટ્રીશીટ રજી. પાના નં....... ____________ .../ રીપેરીંગ રજી. પાના નં. ____________ થી કરેલ છે. જે ચાલુ નાણાંકીય વર્ષ દરમ્યાન આ બીલ સહીત કુલ ખર્ચ રૂ... ____________./- (અંકે ૩....................................) થયેલ છે.", size=11)
+    add_row(5, "૬.", "બીલમાં દર્શાવેલ પેટ્રોલ / ડીઝલ / ઓઇલ વગેરે વાહન નં. ____________ .માટે ખરીદ કરવામાં આવેલ છે જે લોગબુક ભાગ નં. ____________ પાના નં. ____________ થી જમાં કરવામાં આવેલ છે.", size=11)
+    add_row(6, "૭.", "તા. ____________ બીલમાં દર્શાવેલ વાહન નં. ____________ ના રીપેરીંગ કામ કરતી વખતે પરત આવેલ જુના સ્પેર પાર્ટસ મેળવીને આ કચેરીનાં રદ્દ રજી. પાના નં. ____________ ના રોજ જમાં લીધેલ છે.", size=11)
+    add_row(7, "૮.", "તા. ____________ સદર બીલની નોંધ કચેરી ખાતેના બીલ રજી પાના નં. ____________ અનુ.નં.............. ........ કરવામાં આવેલ છે.\nસંશોધન નિયામકશ્રીના ૩૦/૧૦/૨૦૨૧ના પરિપત્રનો અમલ કરેલ છે.", size=11)
+    add_row(8, "૯.", "સદરહું ખર્ચ કચેરીની અગત્યની કામગીરીને ધ્યાને લઇ તેમજ યુનિવર્સિટીનાં હિતાર્થે કરવામાં આવેલ છે.", size=11)
     
     doc.add_paragraph()
-    doc.add_paragraph("સ્થળ : નવસારી\nતારીખ :")
+    
+    p_loc = doc.add_paragraph()
+    run_loc = p_loc.add_run("સ્થળ : નવસારી\nતારીખ :")
+    run_loc.font.size = Pt(12) # <--- Font size for Location/Date
     doc.add_paragraph()
     
     table_sig = doc.add_table(rows=1, cols=2)
@@ -746,20 +786,28 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
         cell.width = Inches(3.4)
     
     p_s1 = table_sig.cell(0,0).paragraphs[0]
-    p_s1.add_run("પ્રોજેક્ટ ઇનચાર્જની સહી અને હોદ્દો").bold = True
+    run_s1 = p_s1.add_run("પ્રોજેક્ટ ઇનચાર્જની સહી અને હોદ્દો")
+    run_s1.bold = True
+    run_s1.font.size = Pt(12) # <--- Font size for Signature 1
     
     p_s2 = table_sig.cell(0,1).paragraphs[0]
-    p_s2.add_run("વિભાગીય વડાની સહી અને હોદ્દો").bold = True
+    run_s2 = p_s2.add_run("વિભાગીય વડાની સહી અને હોદ્દો")
+    run_s2.bold = True
+    run_s2.font.size = Pt(12) # <--- Font size for Signature 2
     p_s2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     
     doc.add_paragraph("\n")
-    doc.add_paragraph("Passed for Payment Rs ........................................")
-    doc.add_paragraph("Rupees: ........................................................................................")
+    
+    p_passed = doc.add_paragraph()
+    run_passed = p_passed.add_run("Passed for Payment Rs ........................................\nRupees: ........................................................................................")
+    run_passed.font.size = Pt(12) # <--- Font size for Passed for Payment
     
     doc.add_paragraph()
-    p_aao = doc.add_paragraph("Assistant Administrative Officer\nN. M. College of Agriculture\nNavsari-396 450")
+    p_aao = doc.add_paragraph()
+    run_aao = p_aao.add_run("Assistant Administrative Officer\nN. M. College of Agriculture\nNavsari-396 450")
+    run_aao.bold = True
+    run_aao.font.size = Pt(12) # <--- Font size for AAO Signature block
     p_aao.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    p_aao.runs[0].bold = True
 
     bio = io.BytesIO()
     doc.save(bio)
