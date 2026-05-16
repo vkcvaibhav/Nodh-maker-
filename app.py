@@ -513,7 +513,7 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
 
     table.columns[0].width = Inches(0.5)
     table.columns[1].width = Inches(1.5)
-    table.columns[2].width = Inches(2.5)
+    table.columns[2].width = Inches(7.5)
     table.columns[3].width = Inches(1.5)
 
     # Data row
