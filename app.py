@@ -556,10 +556,30 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
     return bio.getvalue()
 
 # --- PERFECT PDF REPLICA: Bill Pasting Form ---
+def set_cell_border(cell, **kwargs):
+    """Helper function to draw borders around specific table cells."""
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    tcBorders = tcPr.first_child_found_in("w:tcBorders")
+    if tcBorders is None:
+        tcBorders = OxmlElement('w:tcBorders')
+        tcPr.append(tcBorders)
+    for edge in ('top', 'left', 'bottom', 'right'):
+        edge_data = kwargs.get(edge)
+        if edge_data:
+            tag = 'w:{}'.format(edge)
+            element = tcBorders.find(qn(tag))
+            if element is None:
+                element = OxmlElement(tag)
+                tcBorders.append(element)
+            for key in ["sz", "val", "color", "space", "shadow"]:
+                if key in edge_data:
+                    element.set(qn('w:{}'.format(key)), str(edge_data[key]))
+
 def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     doc = Document()
     
-    # Strict A4 Margins exactly like the PDF
+    # Strict A4 Margins
     section = doc.sections[0]
     section.page_width = Mm(210)
     section.page_height = Mm(297)
@@ -579,27 +599,70 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     font._element.append(rFonts)
 
     # --- PAGE 1 ---
-    p_office = doc.add_paragraph("Office No. 303")
-    p_office.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    p_office.paragraph_format.space_after = Pt(0)
-
-    p_note = doc.add_paragraph("Note:-")
-    p_note.runs[0].bold = True
-    p_note.paragraph_format.space_after = Pt(0)
-
-    p_v = doc.add_paragraph("Voucher No. ............................")
-    p_v.paragraph_format.space_after = Pt(0)
-    doc.add_paragraph("Date..........").paragraph_format.space_after = Pt(12)
     
-    p_col = doc.add_paragraph("N. M. COLLEGE OF AGRICULTURE.")
+    # Top Section: Rectangular Boxes using a 1x3 Table (Left Box, Middle Space, Right Box)
+    header_table = doc.add_table(rows=1, cols=3)
+    header_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    header_table.columns[0].width = Inches(2.0)
+    header_table.columns[1].width = Inches(2.7) # Spacer
+    header_table.columns[2].width = Inches(2.0)
+    
+    # Left Box
+    cell_left = header_table.cell(0, 0)
+    p_office = cell_left.paragraphs[0]
+    p_office.add_run("Office No. 303").bold = True
+    p_office.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    set_cell_border(cell_left, 
+                    top={"sz": 12, "val": "single", "color": "000000"},
+                    bottom={"sz": 12, "val": "single", "color": "000000"},
+                    left={"sz": 12, "val": "single", "color": "000000"},
+                    right={"sz": 12, "val": "single", "color": "000000"})
+    
+    # Right Box
+    cell_right = header_table.cell(0, 2)
+    p_voucher = cell_right.paragraphs[0]
+    p_voucher.add_run("Voucher No. ........................")
+    p_voucher.add_run("\nDate....................................")
+    set_cell_border(cell_right, 
+                    top={"sz": 12, "val": "single", "color": "000000"},
+                    bottom={"sz": 12, "val": "single", "color": "000000"},
+                    left={"sz": 12, "val": "single", "color": "000000"},
+                    right={"sz": 12, "val": "single", "color": "000000"})
+
+    doc.add_paragraph() # Spacer
+    
+    # Center Heading (Font Size 15-16)
+    p_col = doc.add_paragraph()
     p_col.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_col.runs[0].bold = True
+    run_col = p_col.add_run("N. M. COLLEGE OF AGRICULTURE.")
+    run_col.bold = True
+    run_col.font.size = Pt(16)
     p_col.paragraph_format.space_after = Pt(0)
     
-    p_uni = doc.add_paragraph("Navsari Agricultural University, Navsari.-396450")
+    p_uni = doc.add_paragraph()
     p_uni.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_uni.runs[0].bold = True
-    p_uni.paragraph_format.space_after = Pt(20)
+    run_uni = p_uni.add_run("Navsari Agricultural University, Navsari.-396450")
+    run_uni.bold = True
+    run_uni.font.size = Pt(15)
+    p_uni.paragraph_format.space_after = Pt(10)
+    
+    # Bold Border Line under heading
+    line_table = doc.add_table(rows=1, cols=1)
+    line_table.columns[0].width = Inches(6.7)
+    set_cell_border(line_table.cell(0, 0), top={"sz": 24, "val": "single", "color": "000000"})
+    
+    # Pushing the Notes section to the bottom 25% of the page
+    for _ in range(25): 
+        doc.add_paragraph()
+
+    # Bold Border Line above Notes
+    line_table_2 = doc.add_table(rows=1, cols=1)
+    line_table_2.columns[0].width = Inches(6.7)
+    set_cell_border(line_table_2.cell(0, 0), top={"sz": 24, "val": "single", "color": "000000"})
+    
+    p_note = doc.add_paragraph("Note:-")
+    p_note.runs[0].bold = True
+    p_note.paragraph_format.space_after = Pt(6)
     
     def add_bullet(num, text):
         p = doc.add_paragraph()
@@ -607,6 +670,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
         p.add_run(text)
         p.paragraph_format.left_indent = Inches(0.5)
         p.paragraph_format.first_line_indent = Inches(-0.5)
+        p.paragraph_format.space_after = Pt(2)
         
     add_bullet("1.", "Quotation from at least three parties for purchase above Rs. 1000/- should be obtained.")
     add_bullet("2.", "Purchase from authorized details and manufactures be certified on bill no other quotation were available due of purchase from manufacture or authorized dealers.")
@@ -616,22 +680,42 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     doc.add_page_break()
 
     # --- PAGE 2 ---
-    p_h1 = doc.add_paragraph(f"બજેટ સદર\t\t\t:- {budget_head} \t\tEXP. CODE NO. ____________")
-    p_h1.paragraph_format.space_after = Pt(0)
-    p_h2 = doc.add_paragraph(f"ફાળવેલ ગ્રાન્ટ વર્ષ: ૨૦  - ૨૦ \t:- {grant_year}")
-    p_h2.paragraph_format.space_after = Pt(0)
-    p_h3 = doc.add_paragraph(f"બીલની કુલ રકમ\t\t\t:- {amount}")
-    p_h3.paragraph_format.space_after = Pt(0)
-    p_h4 = doc.add_paragraph(f"ચુકવણું કરવામાં આવનાર પાર્ટીનું નામ :- {party_name}")
-    p_h4.paragraph_format.space_after = Pt(0)
-    doc.add_paragraph("(અંગ્રેજી કેપીટલ લેટર)")
+    
+    # Top Details in a Table Format
+    top_table = doc.add_table(rows=4, cols=3)
+    for row in top_table.rows:
+        row.cells[0].width = Inches(2.0)
+        row.cells[1].width = Inches(0.3)
+        row.cells[2].width = Inches(4.4)
+
+    # Row 1
+    top_table.cell(0,0).text = "બજેટ સદર"
+    top_table.cell(0,1).text = ":-"
+    top_table.cell(0,2).text = f"{budget_head} \t\tEXP. CODE NO. ____________"
+    
+    # Row 2
+    top_table.cell(1,0).text = "ફાળવેલ ગ્રાન્ટ વર્ષ: ૨૦  - ૨૦"
+    top_table.cell(1,1).text = ":-"
+    top_table.cell(1,2).text = f"{grant_year}"
+    
+    # Row 3
+    top_table.cell(2,0).text = "બીલની કુલ રકમ"
+    top_table.cell(2,1).text = ":-"
+    top_table.cell(2,2).text = f"{amount}"
+    
+    # Row 4
+    top_table.cell(3,0).text = "ચુકવણું કરવામાં આવનાર પાર્ટીનું નામ\n(અંગ્રેજી કેપીટલ લેટર)"
+    top_table.cell(3,1).text = ":-"
+    top_table.cell(3,2).text = f"{party_name}"
     
     doc.add_paragraph()
     p_cert = doc.add_paragraph(":: પ્રમાણપત્ર ::")
     p_cert.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_cert.runs[0].bold = True
+    p_cert.runs[0].font.size = Pt(14)
     doc.add_paragraph()
     
+    # Certificate Content Table
     table = doc.add_table(rows=9, cols=2)
     for row in table.rows:
         row.cells[0].width = Inches(0.4)
