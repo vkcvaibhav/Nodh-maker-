@@ -635,7 +635,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     
     # Left Box - Office No
     cell_left = header_table.cell(0, 0)
-    p_office = cell_left.paragraphs[1]
+    p_office = cell_left.paragraphs[0]
     run_office = p_office.add_run("Office No. 303")
     run_office.bold = True
     run_office.font.size = Pt(15) 
