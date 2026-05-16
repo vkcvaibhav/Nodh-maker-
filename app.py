@@ -737,7 +737,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     for row in top_table.rows:
         row.cells[0].width = Inches(2.0)
         row.cells[1].width = Inches(0.3)
-        row.cells[2].width = Inches(4.4)
+        row.cells[2].width = Inches(5.4)
 
     # Row 1: બજેટ સદર
     add_p2_header_row(top_table.cell(0,0), "બજેટ સદર")
@@ -784,7 +784,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
         
     for row in table.rows:
         row.cells[0].width = Inches(0.4)
-        row.cells[1].width = Inches(6.3)
+        row.cells[1].width = Inches(7.2)
     
     def add_row(idx, no, text, size=11):
         p_no = table.rows[idx].cells[0].paragraphs[0]
@@ -805,7 +805,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
         
         p_text.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
-    # Applying font size 11 to all Gujarati certificate rows
+    # Applying font size  to all Gujarati certificate rows
     add_row(0, "૧.", "આ બીલમાં જણાવેલ વસ્તુ ખરીદવાની/રીપેરીંગના ખર્ચની મંજુરી આપવાની સત્તા ગુજરાત રાજય કૃષિ યુનિવર્સિટીઓ (સતા સોપણી) નિયમ-૨૦૧૧ ના સ્ટેચ્યુટ નં. ૧૨૧ ની આઇટમ નં ____________ મુજબ એનાયત થયેલ સત્તા પ્રમાણે હેડ ઓફિસ/હેડ ઓફ યુનિટ/યુનિ. ઓફિસર્સ/માન. કુલપતિશ્રીની મંજુરી નં: _________________________________________ . તારીખ: ______/______/_________ થી મંજુરી મળેલ છે. હુકમની નકલ સામેલ છે.", size=11)
     add_row(1, "૨.", f"આ બીલમાં જણાવેલ ખર્ચ આ વિભાગની ____________________________________ .યોજના બજેટ સદર_____________________ .માં સમાવેશ કરવામાં આવેલ છે.", size=11)
     add_row(2, "૩.", "બીલમાં દર્શાવેલ માલની ખરીદી બજાર ભાવ તપાસી ભાવો મેળવી સૌથી ઓછા ભાવ મુજબ છે અને સારી સ્થિતિમાં મળેલ છે. જે કચેરીના સ્ટોર રોજમેળ રજી પાના નં. ____________../ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ) રજી. પાના નં. ____________ ડેડસ્ટોક રજી. નં.... ____________ / ટેલીફોન રજી. પાના નં ____________ / સ્ટેમ્પ રજી. પાના નં ____________ / સ્ટેશનરી રજી. પાના નં. ____________ .રજીસ્ટરનાં ____________ / પરચુરણ માલ સામાન /.... ____________../ રીપેરીંગ રજી. પાના નં.. ____________ નાં રોજ જમા કરવામાં આવેલ છે.", size=11)
