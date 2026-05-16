@@ -640,6 +640,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount):
     run_office.bold = True
     run_office.font.size = Pt(15) 
     p_office.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_office.paragraph_format.space_after = Pt(0)
     set_cell_border(cell_left, top={"sz": 12, "val": "single", "color": "000000"}, bottom={"sz": 12, "val": "single", "color": "000000"}, left={"sz": 12, "val": "single", "color": "000000"}, right={"sz": 12, "val": "single", "color": "000000"})
     
     # Right Box - Voucher & Date
