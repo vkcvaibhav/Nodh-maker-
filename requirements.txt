@@ -5,3 +5,4 @@ PyPDF2
 python-docx
 pandas
 requests
+PyGithub==2.3.0
