@@ -385,15 +385,13 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     table3 = doc.add_table(rows=1, cols=2)
     table3.autofit = False
     
-    # 6.9 Inches ની અંદર રહે તે રીતે પહોળાઈ સેટ કરી છે અને cell ની width પણ ફિક્સ કરી છે
+    # 6.9 Inches ની અંદર રહે તે રીતે પહોળાઈ સેટ કરી છે
     table3.columns[0].width = Inches(5.0)  
     table3.columns[1].width = Inches(1.9)  
     table3.cell(0, 0).width = Inches(5.0)
     table3.cell(0, 1).width = Inches(1.9)
     
-    # લખાણને પેરાગ્રાફમાં ઉમેર્યું છે
     p_out = table3.cell(0,0).paragraphs[0]
-    # લાઈન સ્પેસિંગ બરાબર રાખવા માટે
     p_out.paragraph_format.space_before = Pt(0)
     p_out.paragraph_format.space_after = Pt(0)
     p_out.add_run(f"જા.નં. એસીએન/એન્ટો/એઆઈએનપી-એએ/{out_no}/{letter_year}, નવસારી")
@@ -414,11 +412,12 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     doc.add_paragraph()
     
     p_subj = doc.add_paragraph()
-    p_subj.add_run("        વિષય: ખરીદી હુકમ").bold = True
+    p_subj.add_run("   વિષય: ખરીદી હુકમ").bold = True
     
-    doc.add_paragraph("        જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે નિચેની વસ્તુઓ બિલ સહિત રજુ કરવા વિનંતી.").alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    doc.add_paragraph("   જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે નિચેની વસ્તુઓ બિલ સહિત રજુ કરવા વિનંતી.").alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     doc.add_paragraph() 
 
+    # --- વસ્તુઓના લિસ્ટ વાળા ટેબલની ગોઠવણ ---
     table = doc.add_table(rows=1, cols=5)
     table.style = 'Table Grid'
     table.autofit = False  # <--- આ ઉમેરવું ખૂબ જરૂરી છે
@@ -434,11 +433,16 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
         p = table.cell(0, i).paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p.runs[0].bold = True
-        table.cell(0, i).vertical_alignment = WD_ALIGN_VERTICAL.CENTER]
-    
+        table.cell(0, i).vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+
     total_amount = 0.0
     for index, row in df_items.iterrows():
         row_cells = table.add_row().cells
+        
+        # દરેક નવી રો ની પહોળાઈ લોક કરો
+        for i in range(5): 
+            row_cells[i].width = widths[i]
+
         row_cells[0].text = str(index + 1)
         row_cells[1].text = str(row.get('Details', ''))
         row_cells[2].text = str(row.get('Required Quantity', '')) + " " + str(row.get('Available Pkt/Unit', ''))
@@ -454,6 +458,9 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
         row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     total_row = table.add_row().cells
+    for i in range(5): 
+        total_row[i].width = widths[i]
+
     total_row[3].text = "Total"
     total_row[3].paragraphs[0].runs[0].bold = True
     total_row[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -471,7 +478,7 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     bio = io.BytesIO()
     doc.save(bio)
     return bio.getvalue()
-
+    
 # --- Bill Payment Form ---
 def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount, amount_words):
     doc = Document()
