@@ -127,6 +127,7 @@ def save_to_db(subject, content):
     nondh_id = c.lastrowid
     conn.commit()
     conn.close()
+    push_db_to_github()
     return nondh_id
 
 def save_po_to_db(nondh_id, vendor_name, out_no, date, amount):
