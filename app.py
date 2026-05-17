@@ -1500,7 +1500,8 @@ with tab5:
         po_dict_tab5 = {}
         po_options_tab5 = []
         for po in unfinished_pos_t5:
-            po_id, v_name, o_no, p_date, amt = po
+            # FIXED: Added nondh_id_t5 to catch all 6 items from the database
+            po_id, nondh_id_t5, v_name, o_no, p_date, amt = po
             label = f"PO #{o_no} - {v_name} - ₹{amt} ({p_date})"
             po_options_tab5.append(label)
             po_dict_tab5[label] = po
@@ -1508,7 +1509,8 @@ with tab5:
         selected_po_label_t5 = st.selectbox("પેસ્ટિંગ ફોર્મ માટે ઓર્ડર પસંદ કરો:", po_options_tab5, key="po_tab5")
         
         if selected_po_label_t5:
-            po_id_t5, v_name_t5, o_no_t5, p_date_t5, amt_t5 = po_dict_tab5[selected_po_label_t5]
+            # FIXED: Added nondh_id_t5 here as well
+            po_id_t5, nondh_id_t5, v_name_t5, o_no_t5, p_date_t5, amt_t5 = po_dict_tab5[selected_po_label_t5]
 
             col_p1, col_p2 = st.columns(2)
             with col_p1:
