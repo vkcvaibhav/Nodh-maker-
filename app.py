@@ -1230,7 +1230,7 @@ with tab4:
                             except Exception as e:
                                 st.warning(f"આપમેળે વિગત મેળવવામાં ભૂલ: {e}. કૃપા કરીને જાતે ભરો.")
 
-           with col_b2:
+            with col_b2:
                 bill_date = st.date_input("ઇન્વોઇસની તારીખ (Bill Date)", value=datetime.date.today())
                 final_amt = st.number_input("ચૂકવવા પાત્ર રકમ (Amount to Pay)", value=st.session_state.ext_amt, key="amt_t4")
                 
