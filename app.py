@@ -414,25 +414,28 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     doc.add_paragraph()
     
     p_subj = doc.add_paragraph()
-    p_subj.add_run("   વિષય: ખરીદી હુકમ").bold = True
+    p_subj.add_run("        વિષય: ખરીદી હુકમ").bold = True
     
-    doc.add_paragraph("   જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે નિચેની વસ્તુઓ બિલ સહિત રજુ કરવા વિનંતી.").alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    doc.add_paragraph("        જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે નિચેની વસ્તુઓ બિલ સહિત રજુ કરવા વિનંતી.").alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     doc.add_paragraph() 
 
     table = doc.add_table(rows=1, cols=5)
     table.style = 'Table Grid'
+    table.autofit = False  # <--- આ ઉમેરવું ખૂબ જરૂરી છે
+    
+    # કુલ 6.9 Inches થવું જોઈએ (0.5 + 3.4 + 1.0 + 1.0 + 1.0 = 6.9)
+    widths = [Inches(0.5), Inches(3.4), Inches(1.0), Inches(1.0), Inches(1.0)]
     
     headers = ["અ.નં.", "વસ્તુઓના નામ", "જથ્થો", "ભાવ પ્રતિ નંગ", "કુલ રકમ"]
     for i, ht in enumerate(headers):
-        table.cell(0,i).text = ht
-        p = table.cell(0,i).paragraphs[0]
+        table.columns[i].width = widths[i]
+        table.cell(0, i).width = widths[i] # હેડર સેલની પહોળાઈ લોક કરો
+        table.cell(0, i).text = ht
+        p = table.cell(0, i).paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p.runs[0].bold = True
-        table.cell(0,i).vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-
-    widths = [Inches(0.2), Inches(3.0), Inches(1.0), Inches(1.0), Inches(1.0)]
-    for i in range(5): table.columns[i].width = widths[i]
-
+        table.cell(0, i).vertical_alignment = WD_ALIGN_VERTICAL.CENTER]
+    
     total_amount = 0.0
     for index, row in df_items.iterrows():
         row_cells = table.add_row().cells
