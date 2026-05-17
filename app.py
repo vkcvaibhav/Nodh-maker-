@@ -428,19 +428,34 @@ def create_docx(content):
                         if j < len(parts) - 1: run.add_break()
             sig_buffer.clear()
 
-    def build_and_format_table(data):
+def build_and_format_table(data):
         num_cols = len(data[0])
         table = doc.add_table(rows=len(data), cols=num_cols)
         table.style = 'Table Grid'
-        widths = [Mm(12), Mm(65), Mm(19), Mm(19), Mm(19), Mm(19)]
+        
+        # Turn off autofit to force Word to respect your explicit column widths
+        table.autofit = False 
+        
+        # Calculated to fit exactly within your page margins (153mm usable width)
+        # Sr. No (10mm) + Details (75mm) + Qty (17mm) + Avail (17mm) + Unit Price (17mm) + Total (17mm) = 153mm
+        widths = [Mm(10), Mm(75), Mm(17), Mm(17), Mm(17), Mm(17)]
+        
         for row_idx, row_data in enumerate(data):
+            row_cells = table.rows[row_idx].cells
             for col_idx, cell_text in enumerate(row_data):
-                cell = table.cell(row_idx, col_idx)
-                if num_cols == 6: table.columns[col_idx].width = widths[col_idx]
+                cell = row_cells[col_idx]
+                
+                # Apply width to every cell individually to enforce it in MS Word
+                if num_cols == 6: 
+                    cell.width = widths[col_idx]
+                    
                 is_bold = (row_idx == 0) or ('**' in cell_text)
                 cell.text = cell_text.replace('**', '')
                 p = cell.paragraphs[0]
+                
+                # Center align all columns EXCEPT the Details column (col_idx == 1)
                 p.alignment = WD_ALIGN_PARAGRAPH.LEFT if (col_idx == 1 and row_idx > 0) else WD_ALIGN_PARAGRAPH.CENTER
+                
                 if is_bold:
                     for run in p.runs: run.bold = True
         doc.add_paragraph()
