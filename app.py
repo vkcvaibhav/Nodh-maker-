@@ -28,9 +28,61 @@ from docx.oxml.ns import qn
 NAU_LOGO = "logos/nau_logo.png"
 ICAR_LOGO = "logos/icar_logo.png"
 
+from github import Github
+
 # ==========================================
-# Database Setup for Archiving & Workflow
+# GitHub Cloud Sync Engine
 # ==========================================
+def get_github_repo():
+    token = st.secrets.get("GITHUB_TOKEN")
+    repo_name = st.secrets.get("REPO_NAME", "vkcvaibhav/Nodh-maker-")
+    if not token:
+        return None
+    try:
+        g = Github(token)
+        return g.get_repo(repo_name)
+    except Exception as e:
+        print(f"GitHub Auth Error: {e}")
+        return None
+
+def pull_db_from_github():
+    """Downloads the latest DB from GitHub when the app wakes up."""
+    repo = get_github_repo()
+    if not repo: return
+    try:
+        # Assuming we store it in a 'data' folder on GitHub
+        file_content = repo.get_contents(f"data/{DB_FILE}")
+        with open(DB_FILE, "wb") as f:
+            f.write(file_content.decoded_content)
+        print("Database successfully pulled from GitHub!")
+    except Exception:
+        print("No existing DB found on GitHub. A new one will be created.")
+
+def push_db_to_github():
+    """Uploads the local DB to GitHub after any changes."""
+    repo = get_github_repo()
+    if not repo: return
+    try:
+        with open(DB_FILE, "rb") as f:
+            content = f.read()
+        try:
+            # Update existing file
+            contents = repo.get_contents(f"data/{DB_FILE}")
+            repo.update_file(contents.path, f"Auto-backup DB {datetime.datetime.now()}", content, contents.sha)
+        except:
+            # Create new file if it doesn't exist
+            repo.create_file(f"data/{DB_FILE}", "Initial DB backup", content)
+    except Exception as e:
+        print(f"Failed to push DB to GitHub: {e}")
+
+def push_file_to_github(file_bytes, github_path):
+    """Uploads documents/PDFs to the GitHub repo."""
+    repo = get_github_repo()
+    if not repo: return
+    try:
+        repo.create_file(github_path, f"Uploaded {github_path}", file_bytes)
+    except Exception as e:
+        print(f"Failed to push file to GitHub: {e}")
 # ==========================================
 # Database Setup for Archiving, Workflow & Digital Vault
 # ==========================================
