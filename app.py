@@ -1525,7 +1525,7 @@ with tab4:
         for po in unfinished_pos:
             # FIXED: Added nondh_id_t4 to catch all 6 items from the database
             po_id, nondh_id_t4, v_name, o_no, p_date, amt = po
-            label = f"PO #{o_no} - {v_name} - ₹{amt} ({p_date})"
+            label = f"PO #{o_no} - {v_name} - ₹{float(amt):.2f} ({p_date})"
             po_options_tab4.append(label)
             po_dict_tab4[label] = po
             
