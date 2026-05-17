@@ -366,7 +366,7 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     table2 = doc.add_table(rows=1, cols=2)
     table2.columns[0].width, table2.columns[1].width = Inches(3.4), Inches(3.4)
 
-    table2.cell(0,0).paragraphs[0].add_run("ડૉ. સચિન ડી. પટેલ\nપ્રાધ્યાપક અને વડા")
+    table2.cell(0,0).paragraphs[0].add_run("ડૉ. જે. જે. પસ્તાગીયા\nપ્રાધ્યાપક અને વડા")
     p2 = table2.cell(0,1).paragraphs[0]
     p2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p2.add_run("મોબાઇલ: +૯૧ ૯૪૨૭૮ ૬૭૯૨૫\nઇમેલ: headentonau@gmail.com")
@@ -383,6 +383,9 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     letter_year = po_date.split('/')[-1] if '/' in po_date else (po_date.split('.')[-1] if '.' in po_date else "૨૦૨૬")
     
     table3 = doc.add_table(rows=1, cols=2)
+    table3.autofit = False
+    table3.columns[0].width = Inches(4.5)  # પહેલી કોલમની પહોળાઈ વધારી છે
+    table3.columns[1].width = Inches(2.0)  # બીજી કોલમ (તારીખ માટે)
     table3.cell(0,0).paragraphs[0].add_run(f"જા.નં. એસીએન/એન્ટો/એઆઈએનપી-એએ/{out_no}/{letter_year}, નવસારી")
     p_date = table3.cell(0,1).paragraphs[0]
     p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
