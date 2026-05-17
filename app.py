@@ -430,7 +430,7 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
         p.runs[0].bold = True
         table.cell(0,i).vertical_alignment = WD_ALIGN_VERTICAL.CENTER
 
-    widths = [Inches(0.5), Inches(3.0), Inches(1.0), Inches(1.0), Inches(1.0)]
+    widths = [Inches(0.2), Inches(3.0), Inches(1.0), Inches(1.0), Inches(1.0)]
     for i in range(5): table.columns[i].width = widths[i]
 
     total_amount = 0.0
