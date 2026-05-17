@@ -203,6 +203,7 @@ def save_file_to_vault(file_bytes, original_name, doc_type, nondh_id=None, descr
               (nondh_id, original_name, file_path, upload_date.strftime("%Y-%m-%d"), fy, month_str, doc_type, description))
     conn.commit()
     conn.close()
+    push_db_to_github()
 
 def get_vault_files_by_nondh(nondh_id):
     conn = sqlite3.connect(DB_FILE)
