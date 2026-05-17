@@ -1279,7 +1279,7 @@ with tab1:
             edited_df = pd.DataFrame()
             st.info("આ નોંધમાં ટેબલની જરૂરિયાત જણાઈ નથી. (No table required for this note based on the context).")
             
-        edit_post = st.text_area("નીચેનું લખાણ:", post_text, height=150)
+        edit_post = st.text_area("નીચેનું લખાણ:", post_text, height=300)
         
         # Re-stitch using the custom markdown generator that handles the Grand Total
         final_document = f"{edit_pre}\n\n{df_to_markdown_with_total(edited_df)}\n{edit_post}" if not edited_df.empty else f"{edit_pre}\n\n{edit_post}"
