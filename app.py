@@ -1236,7 +1236,7 @@ with tab1:
         
         pre_text, df, post_text = parse_markdown_to_parts(st.session_state['generated_nondh'])
         
-        edit_pre = st.text_area("ઉપરનું લખાણ:", pre_text, height=150)
+        edit_pre = st.text_area("ઉપરનું લખાણ:", pre_text, height=400)
         
         if not df.empty:
             st.markdown("#### સ્માર્ટ ટેબલ (Smart Table)")
