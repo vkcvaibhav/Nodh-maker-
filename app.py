@@ -407,9 +407,11 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     doc.add_paragraph().paragraph_format.space_after = Pt(6)
     
     p_to = doc.add_paragraph()
-    p_to.add_run("પ્રતિ,\n").bold = True
+    p_to.add_run("પ્રતિ,").bold = True
     doc.add_paragraph(vendor_name).runs[0].bold = True
     doc.add_paragraph(vendor_address)
+
+    doc.add_paragraph()
     
     p_subj = doc.add_paragraph()
     p_subj.add_run("વિષય: ખરીદી હુકમ").bold = True
