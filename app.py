@@ -31,6 +31,9 @@ ICAR_LOGO = "logos/icar_logo.png"
 # ==========================================
 # Database Setup for Archiving & Workflow
 # ==========================================
+# ==========================================
+# Database Setup for Archiving, Workflow & Digital Vault
+# ==========================================
 DB_FILE = "sadar_nondh_archive.db"
 
 def init_db():
@@ -41,10 +44,25 @@ def init_db():
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                   date TEXT, month TEXT, year TEXT, subject TEXT, content TEXT)''')
     
-    # Table for Purchase Orders (Workflow Tracking)
+    # Table for Purchase Orders (Workflow Tracking) - Added nondh_id and payment_info
     c.execute('''CREATE TABLE IF NOT EXISTS purchase_orders 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  vendor_name TEXT, out_no TEXT, date TEXT, amount REAL, status TEXT)''')
+                  nondh_id INTEGER, vendor_name TEXT, out_no TEXT, date TEXT, amount REAL, status TEXT, payment_info TEXT)''')
+                  
+    # Table for Digital Vault (Uploaded PDFs/Images & Drafts) - Added nondh_id
+    c.execute('''CREATE TABLE IF NOT EXISTS digital_vault 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                  nondh_id INTEGER, file_name TEXT, file_path TEXT, upload_date TEXT, 
+                  financial_year TEXT, month TEXT, doc_type TEXT, description TEXT)''')
+                  
+    # Safe Database Schema Upgrades for existing users
+    try: c.execute("ALTER TABLE purchase_orders ADD COLUMN nondh_id INTEGER")
+    except: pass
+    try: c.execute("ALTER TABLE purchase_orders ADD COLUMN payment_info TEXT")
+    except: pass
+    try: c.execute("ALTER TABLE digital_vault ADD COLUMN nondh_id INTEGER")
+    except: pass
+
     conn.commit()
     conn.close()
 
@@ -54,36 +72,40 @@ def save_to_db(subject, content):
     now = datetime.datetime.now()
     c.execute("INSERT INTO archive (date, month, year, subject, content) VALUES (?, ?, ?, ?, ?)", 
               (now.strftime("%d/%m/%Y"), now.strftime("%m"), now.strftime("%Y"), subject, content))
+    nondh_id = c.lastrowid
     conn.commit()
     conn.close()
+    return nondh_id
 
-def save_po_to_db(vendor_name, out_no, date, amount):
+def save_po_to_db(nondh_id, vendor_name, out_no, date, amount):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("INSERT INTO purchase_orders (vendor_name, out_no, date, amount, status) VALUES (?, ?, ?, ?, 'Unfinished')", 
-              (vendor_name, out_no, date, amount))
+    c.execute("INSERT INTO purchase_orders (nondh_id, vendor_name, out_no, date, amount, status) VALUES (?, ?, ?, ?, ?, 'Unfinished')", 
+              (nondh_id, vendor_name, out_no, date, amount))
+    po_id = c.lastrowid
     conn.commit()
     conn.close()
+    return po_id
 
 def get_unfinished_pos():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("SELECT id, vendor_name, out_no, date, amount FROM purchase_orders WHERE status = 'Unfinished'")
+    c.execute("SELECT id, nondh_id, vendor_name, out_no, date, amount FROM purchase_orders WHERE status = 'Unfinished'")
     data = c.fetchall()
     conn.close()
     return data
 
-def mark_po_as_paid(po_id):
+def mark_po_as_paid(po_id, payment_info=""):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("UPDATE purchase_orders SET status = 'Paid' WHERE id = ?", (po_id,))
+    c.execute("UPDATE purchase_orders SET status = 'Paid', payment_info = ? WHERE id = ?", (payment_info, po_id))
     conn.commit()
     conn.close()
 
 def get_archives(month, year, keyword=""):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    query = "SELECT date, subject, content FROM archive WHERE 1=1"
+    query = "SELECT id, date, subject, content FROM archive WHERE 1=1"
     params = []
     if year != "All":
         query += " AND year=?"
@@ -94,10 +116,68 @@ def get_archives(month, year, keyword=""):
     if keyword:
         query += " AND (subject LIKE ? OR content LIKE ?)"
         params.extend([f"%{keyword}%", f"%{keyword}%"])
+    query += " ORDER BY id DESC"
     c.execute(query, tuple(params))
     data = c.fetchall()
     conn.close()
     return data
+
+# --- Digital Vault Helpers ---
+def get_financial_year(date_obj):
+    if date_obj.month < 4: return f"{date_obj.year - 1}-{str(date_obj.year)[2:]}"
+    else: return f"{date_obj.year}-{str(date_obj.year + 1)[2:]}"
+
+def save_file_to_vault(file_bytes, original_name, doc_type, nondh_id=None, description="", upload_date=None):
+    if upload_date is None: upload_date = datetime.date.today()
+    fy = get_financial_year(upload_date)
+    month_str = upload_date.strftime("%B")
+    
+    safe_fy = fy.replace("-", "_")
+    folder_path = os.path.join("digital_vault", safe_fy, doc_type.replace(" ", "_"))
+    os.makedirs(folder_path, exist_ok=True)
+    
+    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    safe_name = f"{timestamp}_{original_name}"
+    file_path = os.path.join(folder_path, safe_name)
+    
+    with open(file_path, "wb") as f: f.write(file_bytes)
+        
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT INTO digital_vault (nondh_id, file_name, file_path, upload_date, financial_year, month, doc_type, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+              (nondh_id, original_name, file_path, upload_date.strftime("%Y-%m-%d"), fy, month_str, doc_type, description))
+    conn.commit()
+    conn.close()
+
+def get_vault_files_by_nondh(nondh_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT file_name, file_path, upload_date, doc_type, description FROM digital_vault WHERE nondh_id = ? ORDER BY id ASC", (nondh_id,))
+    data = c.fetchall()
+    conn.close()
+    return data
+
+def get_vault_files(fy="All", doc_type="All", search_keyword=""):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    query = "SELECT nondh_id, file_name, file_path, upload_date, financial_year, month, doc_type, description FROM digital_vault WHERE 1=1"
+    params = []
+    if fy != "All":
+        query += " AND financial_year=?"
+        params.append(fy)
+    if doc_type != "All":
+        query += " AND doc_type=?"
+        params.append(doc_type)
+    if search_keyword:
+        query += " AND (file_name LIKE ? OR description LIKE ?)"
+        params.extend([f"%{search_keyword}%", f"%{search_keyword}%"])
+    query += " ORDER BY upload_date DESC"
+    c.execute(query, tuple(params))
+    data = c.fetchall()
+    conn.close()
+    return data
+
+init_db()
 # --- NEW: Digital Vault Database Setup & Helpers ---
 def init_db():
     conn = sqlite3.connect(DB_FILE)
