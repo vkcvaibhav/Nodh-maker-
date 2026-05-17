@@ -1287,6 +1287,22 @@ with tab1:
                                data=docx_data,
                                file_name=f"Sadar_Nondh_{datetime.date.today().strftime('%d_%m_%Y')}.docx",
                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        # --- NEW FEATURE: Delete Recent Nondh ---
+        st.markdown("---")
+        with st.expander("🗑️ તાજેતરની નોંધ રદ કરો (Delete Recent Nondh - Last 30 Days)", expanded=False):
+            recent_nondhs = get_recent_nondhs(30)
+            if not recent_nondhs:
+                st.info("છેલ્લા 30 દિવસની કોઈ નોંધ ઉપલબ્ધ નથી.")
+            else:
+                for n_id, n_date, n_subj in recent_nondhs:
+                    col_del1, col_del2 = st.columns([8, 2])
+                    with col_del1:
+                        st.write(f"**ID: {n_id}** | 🗓️ {n_date} | 📝 {n_subj}")
+                    with col_del2:
+                        if st.button("🗑️ Delete", key=f"del_nondh_{n_id}", type="secondary"):
+                            delete_nondh(n_id)
+                            st.error(f"નોંધ ID {n_id} સફળતાપૂર્વક રદ કરવામાં આવી છે!")
+                            st.rerun()
 
 with tab2:
     st.markdown("### 🗄️ જૂના રેકોર્ડ શોધો (Archive Search)")
