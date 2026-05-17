@@ -1291,11 +1291,29 @@ with tab2:
     if display_records:
         st.success(f"કુલ {len(display_records)} રેકોર્ડ મળ્યા.")
         for idx, record in enumerate(display_records):
-            if len(record) == 3: date, subject, content = record
-            elif len(record) == 2: subject, content, date = record[0], record[1], "જૂનો રેકોર્ડ"
-            with st.expander(f"{date} - {subject}"):
+            if len(record) == 4:
+                nondh_id, date, subject, content = record[0], record[1], record[2], record[3]
+            else:
+                continue # Skip invalid records
+            
+            with st.expander(f"ID #{nondh_id if nondh_id else 'Ref'} | {date} - {subject}"):
                 st.markdown(content)
-                st.download_button("Download (Word)", data=create_docx(content), file_name=f"Archive_{idx}.docx", key=f"dl_{idx}") 
+                st.download_button("Download Nondh (Word)", data=create_docx(content), file_name=f"Nondh_{nondh_id}.docx", key=f"dl_{idx}") 
+                
+                # --- Unified View of Vault Files linked to this Nondh ---
+                if nondh_id:
+                    vault_files = get_vault_files_by_nondh(nondh_id)
+                    if vault_files:
+                        st.markdown("---")
+                        st.markdown("#### 📂 જોડાયેલ દસ્તાવેજો (Linked Vault Documents)")
+                        for f_name, f_path, u_date, d_type, desc in vault_files:
+                            col1, col2 = st.columns([8, 2])
+                            with col1: st.caption(f"**{d_type}**: {f_name} ({u_date}) - {desc}")
+                            with col2:
+                                if os.path.exists(f_path):
+                                    with open(f_path, "rb") as f:
+                                        st.download_button("⬇️", data=f.read(), file_name=f_name, key=f"dl_v_{f_path}")
+                                else: st.error("Missing")
 
 with tab3:
     st.markdown("### 📝 ખરીદી હુકમ બનાવો (Generate Purchase Order)")
