@@ -913,21 +913,27 @@ with tab1:
         uploaded_image = st.file_uploader("અથવા હાથથી લખેલી ચબરખીનો ફોટો:", type=["jpg", "jpeg", "png"])
     
     if st.button("જનરેટ કરો (Generate)"):
-        if not api_key: st.error("Please enter your Gemini API Key in the sidebar.")
-        elif not text_prompt and not uploaded_image: st.warning("Please provide either a text requirement or an image.")
+        if not api_key:
+            st.error("Please enter your Gemini API Key in the sidebar.")
+        elif not text_prompt and not uploaded_image:
+            st.warning("Please provide either a text requirement or an image.")
         else:
             with st.spinner("સ્ટેચ્યુટ ૧૨૧ ની ચકાસણી અને નોંધ તૈયાર કરવામાં આવી રહી છે..."):
                 try:
                     statute_context, sample_context = load_permanent_context()
+                    
                     genai.configure(api_key=api_key)
                     model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+                    
                     sys_prompt = f"""
                     You are an expert administrative AI for the Department of Entomology, N. M. College of Agriculture, NAU, Navsari.
                     Your task is to generate a formal 'સાદર નોંધ' in Gujarati.
+                    
                     [CONTEXT START]
                     {statute_context[:15000]}
                     {sample_context}
                     [CONTEXT END]
+
                     Format REQUIRED:
                     તા. {datetime.date.today().strftime('%d/%m/%Y')}
                     સ્થળ: નવસારી
@@ -935,19 +941,49 @@ with tab1:
                     વિષય: [Appropriate Subject...]
                     સવિનય ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેનાં કીટકશાસ્ત્ર વિભાગની આઈ.સી.એ.આર. યોજના AINP on Agril Acarology બ.સ. ૩૦૩/૨૦૯૨ અંતર્ગત [Detailed logical reason]. સદર વસ્તુનો કુલ અંદાજિત ખર્ચ [Total Amount] થનાર છે.
                     જે આપ સાહેબશ્રીને સ્ટેચ્યુટ ૧૨૧ની આઈટમ નંબર [DETERMINED_ITEM_NUMBER] મુજબ એનાયત થયેલ સત્તા અનુસાર સૈદ્ધાંતિક મંજુરી આપવા વિનંતી. સદર ખર્ચ અત્રેના વિભાગમાં ચાલતી આઈ.સી.એ.આર યોજના (બ.સ. ૩૦૩/૨૦૯૨) માં કરવામાં આવશે.
+
+                    STATUTE 121 ITEM NUMBER DETERMINATION (CRITICAL INSTRUCTION):
+                    1. You MUST read the 'Sample Nondh Format' provided in the context to find the historically correct 'આઈટમ નંબર' (Item Number) for this type of purchase.
+                    2. Treat the Sample Nondh as the ultimate precedent. If the purchase involves laboratory chemicals, research materials, or AINP scheme-related items, strictly use the exact item number found in the sample (e.g., "૫૪ (i)" or "54 (i)").
+                    3. Only rely on the dense 'Statute 121 Rules' PDF text if the item category is completely new and not covered by the sample document precedent. 
+                    4. Replace [DETERMINED_ITEM_NUMBER] with the exact number in Gujarati format (like ૫૪ (i)). Do not guess or hallucinate numbers like 45 (ii) (ii).
+
+                    TABLE LOGIC:
+                    Analyze the user request to determine if a table is required. 
+                    - If the request is a general administrative note WITHOUT specific items to purchase, DO NOT include a table.
+                    - If the request involves purchasing, requesting, or listing items with quantities and prices, YOU MUST include a markdown table.
                     
+                    If a table is included, the headers MUST strictly be in ENGLISH and use these EXACT columns:
+                    Sr. No. | Details | Required Quantity | Available Pkt/Unit | Unit/Pkt Price | Total Price
+                    
+                    CRITICAL TABLE RULES:
+                    1. The 'Details' column MUST contain ONLY the item name without the package size (e.g., "ACETIC ACID GLACIAL 99.5% Extra Pure").
+                    2. The 'Available Pkt/Unit' column MUST contain the package size and unit type (e.g., "500 ML", "25 GM", "1 Unit").
+                    3. The 'Required Quantity' and 'Unit/Pkt Price' columns MUST contain pure numbers only (e.g., "1" or "335.95"). Do NOT put units like "ML" or "GM" in these two columns.
+                    4. Do NOT generate a "Grand Total" row. The system will calculate it automatically.
+
                     ખેતીવાડી અધિકારી,કીટકશાસ્ત્ર વિભાગ
                     પ્રોજેકટ ઈન્ચાર્જ,કીટકશાસ્ત્ર વિભાગ
                     પ્રાધ્યાપક અને વડા,કીટકશાસ્ત્ર વિભાગ
+
                     આચાર્ય અને ડીનશ્રી, ન. મ. કૃષિ મહાવિધાયલય, ન.કૃ.યુ. નવસારી
                     
                     ==== AI STATUTE ANALYSIS ====
-                    1. **Original Statute 121 Details:** ...
+                    1. **Original Statute 121 Details:** - **Item Number Used:** [State the specific rule number you used].
+                        - **Original Statute Text:** [Provide the EXACT quote/sentence directly from the attached Statute 121 PDF for this specific rule number].
+                    2. **Justification:** [Explain exactly WHY this specific statute applies to the requested purchase. Relate the items being bought to the statute's wording].
+                    3. **Similar Precedent from Sample Nondh:** [Find a similar past purchase in the uploaded 'Sample Nondh' context. List its Subject, Date, and the Statute Item Number it used to prove your choice is historically accurate].
+                    4. **Rejected Alternative Statute:** [Find another statute item number from the PDF that looks similar but is INCORRECT (e.g., a rule for furniture instead of chemicals). Quote it and explicitly explain why it is NOT compatible with this purchase].
                     """
+                    
                     inputs = [sys_prompt, text_prompt]
-                    if uploaded_image: inputs.append(Image.open(uploaded_image))
+                    if uploaded_image:
+                        inputs.append(Image.open(uploaded_image))
+                        
                     response = model.generate_content(inputs)
                     res_text = response.text
+                    
+                    # Intercept and Split the AI Response safely
                     if "==== AI STATUTE ANALYSIS ====" in res_text:
                         parts = res_text.split("==== AI STATUTE ANALYSIS ====")
                         st.session_state['generated_nondh'] = parts[0].strip()
@@ -955,32 +991,65 @@ with tab1:
                     else:
                         st.session_state['generated_nondh'] = res_text.strip()
                         st.session_state['statute_analysis'] = ""
+                        
                     st.success("સાદર નોંધ સફળતાપૂર્વક તૈયાર થઈ ગઈ છે!")
-                except Exception as e: st.error(f"Error generating document: {e}")
+                    
+                except Exception as e:
+                    st.error(f"Error generating document: {e}")
 
     if 'generated_nondh' in st.session_state:
+        
+        # FEATURE ADDITION: Display Statute Analysis clearly separated from the Document Draft
         if 'statute_analysis' in st.session_state and st.session_state['statute_analysis']:
             with st.expander("🔍 Statute 121 Analysis & Justification (AI Reasoning)", expanded=True):
                 st.info("આ વિભાગ ફક્ત તમારી જાણકારી માટે છે અને વર્ડ ડોક્યુમેન્ટ (DOCX) માં પ્રિન્ટ થશે નહીં.")
                 st.markdown(st.session_state['statute_analysis'])
+        
         st.markdown("---")
+        st.markdown("### ડ્રાફ્ટ એડિટિંગ (Smart Editor)")
+        
         pre_text, df, post_text = parse_markdown_to_parts(st.session_state['generated_nondh'])
+        
         edit_pre = st.text_area("ઉપરનું લખાણ:", pre_text, height=150)
         
         if not df.empty:
+            st.markdown("#### સ્માર્ટ ટેબલ (Smart Table)")
+            st.info("નોંધ: 'Required Quantity' અથવા 'Unit/Pkt Price' બદલશો તો 'Total Price' અને લખાણમાં રહેલ 'અંદાજિત ખર્ચ' આપોઆપ બદલાઈ જશે.")
+            
             edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+            
+            # Intelligent Math Calculation using Regex to strip any accidental text
             if 'Required Quantity' in edited_df.columns and 'Unit/Pkt Price' in edited_df.columns and 'Total Price' in edited_df.columns:
+                
+                # Extract pure numbers safely
                 req_qty = edited_df['Required Quantity'].astype(str).str.extract(r'(\d+\.?\d*)')[0].astype(float).fillna(0)
                 unit_price = edited_df['Unit/Pkt Price'].astype(str).str.extract(r'(\d+\.?\d*)')[0].astype(float).fillna(0)
+                
+                # Perform the calculation
                 edited_df['Total Price'] = (req_qty * unit_price).round(2)
+                
+                # Dynamic Grand Total Calculation
                 grand_total_calc = edited_df['Total Price'].sum()
                 st.success(f"**Grand Total (કુલ રકમ): ₹ {grand_total_calc:,.2f}**")
+                
+                # Automatically sync the paragraph text with the accurate Grand Total
                 edit_pre = re.sub(r'(અંદાજિત ખર્ચ\s*).*?(\s*થનાર)', f'\g<1>{grand_total_calc:,.2f}\g<2>', edit_pre)
         else:
             edited_df = pd.DataFrame()
+            st.info("આ નોંધમાં ટેબલની જરૂરિયાત જણાઈ નથી. (No table required for this note based on the context).")
             
         edit_post = st.text_area("નીચેનું લખાણ:", post_text, height=150)
+        
+        # Re-stitch using the custom markdown generator that handles the Grand Total
         final_document = f"{edit_pre}\n\n{df_to_markdown_with_total(edited_df)}\n{edit_post}" if not edited_df.empty else f"{edit_pre}\n\n{edit_post}"
+        
+        st.markdown("---")
+        st.markdown("### દસ્તાવેજ પ્રીવ્યુ (Visual Preview - 20/80 Layout)")
+        
+        with st.container(border=True):
+            prev_blank, prev_content = st.columns([2, 8]) 
+            with prev_content:
+                st.markdown(final_document)
         
         st.markdown("---")
         col_save, col_down = st.columns(2)
@@ -993,9 +1062,13 @@ with tab1:
                         break
                 save_to_db(subj, final_document)
                 st.success("નોંધ સાચવી લેવામાં આવી છે! (હવે તમે Tab 3 માંથી ખરીદી હુકમ બનાવી શકશો)")
+                
         with col_down:
             docx_data = create_docx(final_document)
-            st.download_button("Download as Word (DOCX)", data=docx_data, file_name=f"Sadar_Nondh_{datetime.date.today().strftime('%d_%m_%Y')}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+            st.download_button(label="Download as Word (DOCX)",
+                               data=docx_data,
+                               file_name=f"Sadar_Nondh_{datetime.date.today().strftime('%d_%m_%Y')}.docx",
+                               mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
 with tab2:
     st.markdown("### 🗄️ જૂના રેકોર્ડ શોધો (Archive Search)")
