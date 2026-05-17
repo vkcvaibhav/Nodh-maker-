@@ -428,7 +428,7 @@ def create_docx(content):
                         if j < len(parts) - 1: run.add_break()
             sig_buffer.clear()
 
-def build_and_format_table(data):
+    def build_and_format_table(data):
         num_cols = len(data[0])
         table = doc.add_table(rows=len(data), cols=num_cols)
         table.style = 'Table Grid'
