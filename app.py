@@ -156,6 +156,13 @@ def mark_po_as_paid(po_id, payment_info=""):
     conn.commit()
     push_db_to_github()
     conn.close()
+    
+def delete_po(po_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM purchase_orders WHERE id = ?", (po_id,))
+    conn.commit()
+    conn.close()
 
 def get_archives(month, year, keyword=""):
     conn = sqlite3.connect(DB_FILE)
