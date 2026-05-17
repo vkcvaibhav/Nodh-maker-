@@ -304,7 +304,7 @@ def search_sample_nondh(keyword, month, year):
         subject_str = sub_match.group(1).strip() if sub_match else "Historical Reference"
         orig_date_match = re.search(r'તા\.\s*([^\n]+)', block)
         display_date = orig_date_match.group(1).strip() if orig_date_match else "Unknown"
-        results.append((display_date + " [Old Sample Ref]", subject_str, block))
+        results.append((None, display_date + " [Old Sample Ref]", subject_str, block))
     return results
 
 def parse_markdown_to_parts(text):
