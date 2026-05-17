@@ -1240,14 +1240,21 @@ with tab1:
         st.markdown("---")
         col_save, col_down = st.columns(2)
         with col_save:
-            if st.button("આર્કાઇવમાં સેવ કરો (Save)"):
+            if st.button("આર્કાઇવમાં સેવ કરો (Save Nondh)"):
                 subj = "No Subject"
                 for line in final_document.split('\n'):
                     if "વિષય:" in line:
                         subj = line.replace("વિષય:", "").strip()
                         break
-                save_to_db(subj, final_document)
-                st.success("નોંધ સાચવી લેવામાં આવી છે! (હવે તમે Tab 3 માંથી ખરીદી હુકમ બનાવી શકશો)")
+                
+                # Save Nondh to DB and get the ID
+                nondh_id = save_to_db(subj, final_document)
+                st.session_state['recent_nondh_id'] = nondh_id
+                
+                # Automatically save the DOCX to the vault linked to this new Nondh
+                docx_data = create_docx(final_document)
+                save_file_to_vault(docx_data, f"Nondh_{nondh_id}_{datetime.date.today().strftime('%d_%m')}.docx", "Sadar Nondh Draft", nondh_id=nondh_id)
+                st.success("નોંધ અને ડ્રાફ્ટ સાચવી લેવામાં આવ્યા છે! (હવે તમે Tab 3 માં જઈ શકો છો)")
                 
         with col_down:
             docx_data = create_docx(final_document)
