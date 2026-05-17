@@ -1000,13 +1000,14 @@ st.title("સાદર નોંધ જનરેટર (Intelligent Sadar Nondh 
 
 api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
 
-# --- ADDED TAB 5 ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+# --- ADDED TAB 6 ---
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "નવી સાદર નોંધ (Create)", 
     "જુની નોંધ (Archives)", 
     "ખરીદી હુકમ (Purchase Order)",
     "બિલ પેમેન્ટ (Bill Payment)",
-    "બિલ પેસ્ટિંગ (Bill Pasting)"
+    "બિલ પેસ્ટિંગ (Bill Pasting)",
+    "🗄️ ડિજિટલ આર્કાઇવ (Digital Vault)"  # <-- NEW TAB
 ])
 
 with tab1:
