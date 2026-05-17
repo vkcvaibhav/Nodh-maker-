@@ -384,8 +384,8 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     
     table3 = doc.add_table(rows=1, cols=2)
     table3.autofit = False
-    table3.columns[0].width = Inches(4.5)  # પહેલી કોલમની પહોળાઈ વધારી છે
-    table3.columns[1].width = Inches(2.0)  # બીજી કોલમ (તારીખ માટે)
+    table3.columns[0].width = Inches(6.5)  # પહેલી કોલમની પહોળાઈ વધારી છે
+    table3.columns[1].width = Inches(1.0)  # બીજી કોલમ (તારીખ માટે)
     table3.cell(0,0).paragraphs[0].add_run(f"જા.નં. એસીએન/એન્ટો/એઆઈએનપી-એએ/{out_no}/{letter_year}, નવસારી")
     p_date = table3.cell(0,1).paragraphs[0]
     p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
