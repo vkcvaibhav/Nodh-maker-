@@ -1228,9 +1228,15 @@ with tab3:
     st.markdown("#### ૨. સહી કરેલ ખરીદી હુકમ અપલોડ કરો (Upload Signed PO - Optional)")
     uploaded_po = st.file_uploader("મંજૂર થયેલ/સહીવાળો ઓર્ડર અપલોડ કરો:", type=["pdf", "jpg", "jpeg", "png"], key="po_up")
     if uploaded_po:
+        file_bytes = uploaded_po.getbuffer()
+        # Save to existing folder structure (optional, you can remove this if you only want the vault)
         os.makedirs("signed_pos", exist_ok=True)
-        with open(os.path.join("signed_pos", uploaded_po.name), "wb") as f: f.write(uploaded_po.getbuffer())
-        st.success("સહી કરેલ ફાઈલ સેવ થઈ ગઈ છે!")
+        with open(os.path.join("signed_pos", uploaded_po.name), "wb") as f: 
+            f.write(file_bytes)
+            
+        # NEW: Automatically save to Vault
+        save_file_to_vault(file_bytes, uploaded_po.name, "Signed Purchase Order", "Auto-uploaded from Tab 3")
+        st.success("સહી કરેલ ફાઈલ વોલ્ટમાં સેવ થઈ ગઈ છે!")
 
     st.markdown("---")
     st.markdown("#### ૩. સપ્લાયર અને ઓર્ડરની વિગત (Supplier & Order Details)")
