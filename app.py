@@ -254,7 +254,33 @@ def get_vault_files(fy="All", doc_type="All", search_keyword=""):
     data = c.fetchall()
     conn.close()
     return data
-# ---------------------------------------------------
+def get_recent_nondhs(days=30):
+    """છેલ્લા 30 દિવસની સાદર નોંધ મેળવવા માટે"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id, date, subject FROM archive ORDER BY id DESC LIMIT 50")
+    records = c.fetchall()
+    conn.close()
+    
+    recent_records = []
+    cutoff_date = datetime.date.today() - datetime.timedelta(days=days)
+    for row in records:
+        try:
+            # ડેટાબેઝમાં તારીખ DD/MM/YYYY ફોર્મેટમાં છે
+            row_date = datetime.datetime.strptime(row[1], "%d/%m/%Y").date()
+            if row_date >= cutoff_date:
+                recent_records.append(row)
+        except Exception:
+            pass # જો તારીખમાં ભૂલ હોય તો સ્કીપ કરો
+    return recent_records
+
+def delete_nondh(nondh_id):
+    """સાદર નોંધને ડેટાબેઝમાંથી કાયમ માટે ડિલીટ કરવા માટે"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM archive WHERE id = ?", (nondh_id,))
+    conn.commit()
+    conn.close()
 init_db()
 
 # ==========================================
