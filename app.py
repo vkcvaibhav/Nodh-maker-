@@ -384,10 +384,23 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     
     table3 = doc.add_table(rows=1, cols=2)
     table3.autofit = False
-    table3.columns[0].width = Inches(6.5)  # પહેલી કોલમની પહોળાઈ વધારી છે
-    table3.columns[1].width = Inches(1.0)  # બીજી કોલમ (તારીખ માટે)
-    table3.cell(0,0).paragraphs[0].add_run(f"જા.નં. એસીએન/એન્ટો/એઆઈએનપી-એએ/{out_no}/{letter_year}, નવસારી")
+    
+    # 6.9 Inches ની અંદર રહે તે રીતે પહોળાઈ સેટ કરી છે અને cell ની width પણ ફિક્સ કરી છે
+    table3.columns[0].width = Inches(5.0)  
+    table3.columns[1].width = Inches(1.9)  
+    table3.cell(0, 0).width = Inches(5.0)
+    table3.cell(0, 1).width = Inches(1.9)
+    
+    # લખાણને પેરાગ્રાફમાં ઉમેર્યું છે
+    p_out = table3.cell(0,0).paragraphs[0]
+    # લાઈન સ્પેસિંગ બરાબર રાખવા માટે
+    p_out.paragraph_format.space_before = Pt(0)
+    p_out.paragraph_format.space_after = Pt(0)
+    p_out.add_run(f"જા.નં. એસીએન/એન્ટો/એઆઈએનપી-એએ/{out_no}/{letter_year}, નવસારી")
+    
     p_date = table3.cell(0,1).paragraphs[0]
+    p_date.paragraph_format.space_before = Pt(0)
+    p_date.paragraph_format.space_after = Pt(0)
     p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p_date.add_run(f"તારીખ: {po_date}")
             
