@@ -1227,7 +1227,22 @@ with tab1:
             st.markdown("#### સ્માર્ટ ટેબલ (Smart Table)")
             st.info("નોંધ: 'Required Quantity' અથવા 'Unit/Pkt Price' બદલશો તો 'Total Price' અને લખાણમાં રહેલ 'અંદાજિત ખર્ચ' આપોઆપ બદલાઈ જશે.")
             
-            edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+            # ટેબલની કોલમની પહોળાઈ (width) સેટ કરવા માટેનું કન્ફિગરેશન
+            custom_column_config = {
+                "Sr. No.": st.column_config.TextColumn("Sr. No.", width="small"),
+                "Details": st.column_config.TextColumn("Details", width="large"),
+                "Required Quantity": st.column_config.TextColumn("Required Quantity", width="small"),
+                "Available Pkt/Unit": st.column_config.TextColumn("Available Pkt/Unit", width="medium"),
+                "Unit/Pkt Price": st.column_config.TextColumn("Unit/Pkt Price", width="medium"),
+                "Total Price": st.column_config.TextColumn("Total Price", width="medium")
+            }
+            
+            edited_df = st.data_editor(
+                df, 
+                num_rows="dynamic", 
+                use_container_width=True,
+                column_config=custom_column_config
+            )
             
             # Intelligent Math Calculation using Regex to strip any accidental text
             if 'Required Quantity' in edited_df.columns and 'Unit/Pkt Price' in edited_df.columns and 'Total Price' in edited_df.columns:
