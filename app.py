@@ -229,6 +229,11 @@ def get_vault_files(fy="All", doc_type="All", search_keyword=""):
     conn.close()
     return data
 
+# Check if we already pulled the DB in this session to avoid constant downloading
+if "db_synced" not in st.session_state:
+    pull_db_from_github()
+    st.session_state.db_synced = True
+
 init_db()
 # --- NEW: Digital Vault Database Setup & Helpers ---
 def init_db():
