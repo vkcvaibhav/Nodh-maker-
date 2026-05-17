@@ -412,9 +412,9 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     doc.add_paragraph()
     
     p_subj = doc.add_paragraph()
-    p_subj.add_run("   વિષય: ખરીદી હુકમ").bold = True
+    p_subj.add_run("        વિષય: ખરીદી હુકમ").bold = True
     
-    doc.add_paragraph("   જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે નિચેની વસ્તુઓ બિલ સહિત રજુ કરવા વિનંતી.").alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    doc.add_paragraph("        જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે નિચેની વસ્તુઓ બિલ સહિત રજુ કરવા વિનંતી.").alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     doc.add_paragraph() 
 
     # --- વસ્તુઓના લિસ્ટ વાળા ટેબલની ગોઠવણ ---
