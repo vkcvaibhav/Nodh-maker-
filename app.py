@@ -1305,10 +1305,14 @@ with tab4:
                 invoice_upload = st.file_uploader("પાર્ટીનું બિલ અપલોડ કરો (Upload Vendor Invoice PDF/Img)", type=["pdf", "jpg", "png"])
                 
                 if invoice_upload:
+                    file_bytes = invoice_upload.getbuffer()
                     os.makedirs("vendor_invoices", exist_ok=True)
                     with open(os.path.join("vendor_invoices", invoice_upload.name), "wb") as f: 
-                        f.write(invoice_upload.getbuffer())
-                    st.success("ઇન્વોઇસ સેવ થઈ ગયું!")
+                        f.write(file_bytes)
+                        
+                    # NEW: Automatically save to Vault
+                    save_file_to_vault(file_bytes, invoice_upload.name, "Party Invoice", f"Auto-uploaded from Tab 4 for PO #{o_no}")
+                    st.success("ઇન્વોઇસ વોલ્ટમાં સેવ થઈ ગયું!")
 
                     if invoice_upload.name != st.session_state.last_invoice and api_key:
                         with st.spinner("AI દ્વારા બિલની વિગતો વાંચવામાં આવી રહી છે... (Extracting...)"):
