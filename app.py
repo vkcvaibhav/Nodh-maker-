@@ -1745,6 +1745,12 @@ with tab6:
                         mark_po_as_paid(po_data[0], pay_info)
                         st.success("પેમેન્ટ નોંધાઈ ગયું છે અને ફાઈલ ક્લોઝ થઈ ગઈ છે!")
                         st.rerun()
+                with col_pay3:
+                    st.write("")
+                    if st.button("🗑️ Delete Entry Forever"):
+                        delete_po(po_data[0])
+                        st.error("ઓર્ડર કાયમ માટે રદ કરવામાં આવ્યો છે!")
+                        st.rerun()
 
     # Section B: General Vault Search
     st.markdown("---")
