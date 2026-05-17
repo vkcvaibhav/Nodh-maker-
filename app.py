@@ -1475,3 +1475,71 @@ with tab5:
                     mark_po_as_paid(po_id_t5)
                     st.success("ઓર્ડર પેમેન્ટ લિસ્ટમાંથી દૂર કરવામાં આવ્યો છે! રિફ્રેશ કરો.")
                     st.rerun()
+# --- TAB 6 (Digital Vault / Archive) ---
+with tab6:
+    st.markdown("### 🗄️ ડિજિટલ આર્કાઇવ અને ડોક્યુમેન્ટ વોલ્ટ (Digital Vault)")
+    st.info("અહીં તમે નાણાકીય વર્ષ (Financial Year) મુજબ તમારા તમામ સહી કરેલા ડોક્યુમેન્ટ્સ અને બિલો સાચવી અને શોધી શકશો.")
+
+    # Section A: Manual Upload
+    with st.expander("➕ નવું ડોક્યુમેન્ટ અપલોડ કરો (Upload New Document)", expanded=False):
+        col_v1, col_v2 = st.columns(2)
+        with col_v1:
+            vault_upload = st.file_uploader("ફાઈલ પસંદ કરો (PDF, JPG, PNG)", type=["pdf", "jpg", "jpeg", "png"])
+            vault_doc_type = st.selectbox("ડોક્યુમેન્ટનો પ્રકાર (Document Type)", 
+                                          ["Signed Nondh", "Party Invoice", "Signed Purchase Order", "Approval Letter", "Other"])
+        with col_v2:
+            vault_date = st.date_input("તારીખ પસંદ કરો (Date - determines Financial Year)", value=datetime.date.today())
+            vault_desc = st.text_input("ટૂંકી વિગત (Short Description/Tags)", placeholder="દા.ત., મંજુરી નોંધ સહીવાળી")
+            
+        if st.button("💾 વોલ્ટમાં સાચવો (Save to Vault)"):
+            if vault_upload:
+                save_file_to_vault(vault_upload.getbuffer(), vault_upload.name, vault_doc_type, vault_desc, vault_date)
+                st.success("ફાઈલ સફળતાપૂર્વક વોલ્ટમાં સચવાઈ ગઈ છે!")
+            else:
+                st.warning("કૃપા કરીને ફાઈલ અપલોડ કરો.")
+
+    st.markdown("---")
+    
+    # Section B: Filter and Display
+    st.markdown("#### 🔍 ડોક્યુમેન્ટ શોધો (Search & Filter)")
+    
+    # Dynamic Financial Year Options based on current date +/- a few years
+    current_year = datetime.date.today().year
+    fy_options = ["All"] + [f"{y}-{str(y+1)[2:]}" for y in range(current_year-2, current_year+3)][::-1]
+    
+    col_f1, col_f2, col_f3 = st.columns(3)
+    with col_f1:
+        filter_fy = st.selectbox("નાણાકીય વર્ષ (Financial Year)", fy_options)
+    with col_f2:
+        filter_type = st.selectbox("પ્રકાર (Type)", ["All", "Signed Nondh", "Party Invoice", "Signed Purchase Order", "Approval Letter", "Other"])
+    with col_f3:
+        search_kw = st.text_input("શબ્દથી શોધો (Search by Name/Tag)")
+
+    vault_records = get_vault_files(filter_fy, filter_type, search_kw)
+    
+    if not vault_records:
+        st.info("કોઈ ડોક્યુમેન્ટ મળ્યા નથી. (No documents found matching the criteria).")
+    else:
+        st.success(f"કુલ {len(vault_records)} ડોક્યુમેન્ટ્સ મળ્યા.")
+        
+        # Display as a clean list with download buttons
+        for idx, record in enumerate(vault_records):
+            f_name, f_path, u_date, fy, month, d_type, desc = record
+            
+            with st.container(border=True):
+                col_info, col_btn = st.columns([8, 2])
+                with col_info:
+                    st.markdown(f"**{f_name}**")
+                    st.caption(f"🗓️ {u_date} | 📁 {fy} ({month}) | 🏷️ {d_type} | 📝 {desc}")
+                with col_btn:
+                    # Read file for download
+                    if os.path.exists(f_path):
+                        with open(f_path, "rb") as f:
+                            st.download_button(
+                                label="⬇️ Download",
+                                data=f.read(),
+                                file_name=f_name,
+                                key=f"dl_vault_{idx}"
+                            )
+                    else:
+                        st.error("File missing from disk")
