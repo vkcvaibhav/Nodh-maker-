@@ -138,6 +138,7 @@ def save_po_to_db(nondh_id, vendor_name, out_no, date, amount):
     po_id = c.lastrowid
     conn.commit()
     conn.close()
+    push_db_to_github()
     return po_id
 
 def get_unfinished_pos():
