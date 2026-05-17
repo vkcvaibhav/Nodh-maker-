@@ -1384,7 +1384,8 @@ with tab4:
         po_dict_tab4 = {}
         po_options_tab4 = []
         for po in unfinished_pos:
-            po_id, v_name, o_no, p_date, amt = po
+            # FIXED: Added nondh_id_t4 to catch all 6 items from the database
+            po_id, nondh_id_t4, v_name, o_no, p_date, amt = po
             label = f"PO #{o_no} - {v_name} - ₹{amt} ({p_date})"
             po_options_tab4.append(label)
             po_dict_tab4[label] = po
@@ -1392,7 +1393,8 @@ with tab4:
         selected_po_label_t4 = st.selectbox("પેમેન્ટ ફોર્મ માટે ઓર્ડર પસંદ કરો (Select Pending PO):", po_options_tab4, key="po_tab4")
         
         if selected_po_label_t4:
-            po_id, v_name, o_no, p_date, amt = po_dict_tab4[selected_po_label_t4]
+            # FIXED: Added nondh_id_t4 here as well
+            po_id, nondh_id_t4, v_name, o_no, p_date, amt = po_dict_tab4[selected_po_label_t4]
             
             if st.session_state.get("current_po_id_t4") != po_id:
                 st.session_state.current_po_id_t4 = po_id
