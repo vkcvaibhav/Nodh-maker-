@@ -154,6 +154,7 @@ def mark_po_as_paid(po_id, payment_info=""):
     c = conn.cursor()
     c.execute("UPDATE purchase_orders SET status = 'Paid', payment_info = ? WHERE id = ?", (payment_info, po_id))
     conn.commit()
+    push_db_to_github()
     conn.close()
 
 def get_archives(month, year, keyword=""):
