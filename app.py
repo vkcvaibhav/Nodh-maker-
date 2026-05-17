@@ -207,19 +207,17 @@ def get_financial_year(date_obj):
     else:
         return f"{date_obj.year}-{str(date_obj.year + 1)[2:]}"
 
-def save_file_to_vault(file_bytes, original_name, doc_type, description="", upload_date=None):
+def save_file_to_vault(file_bytes, original_name, doc_type, nondh_id=None, description="", upload_date=None):
     if upload_date is None: 
         upload_date = datetime.date.today()
         
     fy = get_financial_year(upload_date)
     month_str = upload_date.strftime("%B")
     
-    # Create an organized physical folder structure: vault/FY_2025-26/Signed_PO/
     safe_fy = fy.replace("-", "_")
     folder_path = os.path.join("digital_vault", safe_fy, doc_type.replace(" ", "_"))
     os.makedirs(folder_path, exist_ok=True)
     
-    # Prepend timestamp to avoid overriding files with the same name
     timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
     safe_name = f"{timestamp}_{original_name}"
     file_path = os.path.join(folder_path, safe_name)
@@ -229,15 +227,16 @@ def save_file_to_vault(file_bytes, original_name, doc_type, description="", uplo
         
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("INSERT INTO digital_vault (file_name, file_path, upload_date, financial_year, month, doc_type, description) VALUES (?, ?, ?, ?, ?, ?, ?)",
-              (original_name, file_path, upload_date.strftime("%Y-%m-%d"), fy, month_str, doc_type, description))
+    c.execute("INSERT INTO digital_vault (nondh_id, file_name, file_path, upload_date, financial_year, month, doc_type, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+              (nondh_id, original_name, file_path, upload_date.strftime("%Y-%m-%d"), fy, month_str, doc_type, description))
     conn.commit()
     conn.close()
 
 def get_vault_files(fy="All", doc_type="All", search_keyword=""):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    query = "SELECT file_name, file_path, upload_date, financial_year, month, doc_type, description FROM digital_vault WHERE 1=1"
+    # FIXED: Added nondh_id to the SELECT query here
+    query = "SELECT nondh_id, file_name, file_path, upload_date, financial_year, month, doc_type, description FROM digital_vault WHERE 1=1"
     params = []
     
     if fy != "All":
