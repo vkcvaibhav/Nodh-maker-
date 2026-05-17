@@ -422,7 +422,7 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     table = doc.add_table(rows=1, cols=5)
     table.style = 'Table Grid'
     
-    headers = ["નં.", "વસ્તુઓના નામ", "જથ્થો", "ભાવ પ્રતિ નંગ", "કુલ રકમ"]
+    headers = ["અ.નં.", "વસ્તુઓના નામ", "જથ્થો", "ભાવ પ્રતિ નંગ", "કુલ રકમ"]
     for i, ht in enumerate(headers):
         table.cell(0,i).text = ht
         p = table.cell(0,i).paragraphs[0]
