@@ -29,7 +29,7 @@ NAU_LOGO = "logos/nau_logo.png"
 ICAR_LOGO = "logos/icar_logo.png"
 
 # ==========================================
-# Database Setup for Archiving & Workflow
+# Database Setup for Archiving & Workflow (UPDATED FOR VAULT INTEGRATION)
 # ==========================================
 DB_FILE = "sadar_nondh_archive.db"
 
@@ -41,10 +41,25 @@ def init_db():
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                   date TEXT, month TEXT, year TEXT, subject TEXT, content TEXT)''')
     
-    # Table for Purchase Orders (Workflow Tracking)
+    # Table for Purchase Orders (Workflow Tracking) - Added nondh_id and payment_info
     c.execute('''CREATE TABLE IF NOT EXISTS purchase_orders 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  vendor_name TEXT, out_no TEXT, date TEXT, amount REAL, status TEXT)''')
+                  nondh_id INTEGER, vendor_name TEXT, out_no TEXT, date TEXT, amount REAL, status TEXT, payment_info TEXT)''')
+                  
+    # Table for Digital Vault (Uploaded PDFs/Images & Drafts) - Added nondh_id
+    c.execute('''CREATE TABLE IF NOT EXISTS digital_vault 
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                  nondh_id INTEGER, file_name TEXT, file_path TEXT, upload_date TEXT, 
+                  financial_year TEXT, month TEXT, doc_type TEXT, description TEXT)''')
+                  
+    # Safe Database Schema Upgrades for existing users
+    try: c.execute("ALTER TABLE purchase_orders ADD COLUMN nondh_id INTEGER")
+    except: pass
+    try: c.execute("ALTER TABLE purchase_orders ADD COLUMN payment_info TEXT")
+    except: pass
+    try: c.execute("ALTER TABLE digital_vault ADD COLUMN nondh_id INTEGER")
+    except: pass
+
     conn.commit()
     conn.close()
 
@@ -54,36 +69,40 @@ def save_to_db(subject, content):
     now = datetime.datetime.now()
     c.execute("INSERT INTO archive (date, month, year, subject, content) VALUES (?, ?, ?, ?, ?)", 
               (now.strftime("%d/%m/%Y"), now.strftime("%m"), now.strftime("%Y"), subject, content))
+    nondh_id = c.lastrowid
     conn.commit()
     conn.close()
+    return nondh_id
 
-def save_po_to_db(vendor_name, out_no, date, amount):
+def save_po_to_db(nondh_id, vendor_name, out_no, date, amount):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("INSERT INTO purchase_orders (vendor_name, out_no, date, amount, status) VALUES (?, ?, ?, ?, 'Unfinished')", 
-              (vendor_name, out_no, date, amount))
+    c.execute("INSERT INTO purchase_orders (nondh_id, vendor_name, out_no, date, amount, status) VALUES (?, ?, ?, ?, ?, 'Unfinished')", 
+              (nondh_id, vendor_name, out_no, date, amount))
+    po_id = c.lastrowid
     conn.commit()
     conn.close()
+    return po_id
 
 def get_unfinished_pos():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("SELECT id, vendor_name, out_no, date, amount FROM purchase_orders WHERE status = 'Unfinished'")
+    c.execute("SELECT id, nondh_id, vendor_name, out_no, date, amount FROM purchase_orders WHERE status = 'Unfinished'")
     data = c.fetchall()
     conn.close()
     return data
 
-def mark_po_as_paid(po_id):
+def mark_po_as_paid(po_id, payment_info=""):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("UPDATE purchase_orders SET status = 'Paid' WHERE id = ?", (po_id,))
+    c.execute("UPDATE purchase_orders SET status = 'Paid', payment_info = ? WHERE id = ?", (payment_info, po_id))
     conn.commit()
     conn.close()
 
 def get_archives(month, year, keyword=""):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    query = "SELECT date, subject, content FROM archive WHERE 1=1"
+    query = "SELECT id, date, subject, content FROM archive WHERE 1=1"
     params = []
     if year != "All":
         query += " AND year=?"
@@ -94,72 +113,52 @@ def get_archives(month, year, keyword=""):
     if keyword:
         query += " AND (subject LIKE ? OR content LIKE ?)"
         params.extend([f"%{keyword}%", f"%{keyword}%"])
+    query += " ORDER BY id DESC"
     c.execute(query, tuple(params))
     data = c.fetchall()
     conn.close()
     return data
-# --- NEW: Digital Vault Database Setup & Helpers ---
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    # Table for Sadar Nondh
-    c.execute('''CREATE TABLE IF NOT EXISTS archive 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  date TEXT, month TEXT, year TEXT, subject TEXT, content TEXT)''')
-    
-    # Table for Purchase Orders (Workflow Tracking)
-    c.execute('''CREATE TABLE IF NOT EXISTS purchase_orders 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  vendor_name TEXT, out_no TEXT, date TEXT, amount REAL, status TEXT)''')
-                  
-    # NEW Table for Digital Vault (Uploaded PDFs/Images)
-    c.execute('''CREATE TABLE IF NOT EXISTS digital_vault 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  file_name TEXT, file_path TEXT, upload_date TEXT, 
-                  financial_year TEXT, month TEXT, doc_type TEXT, description TEXT)''')
-    conn.commit()
-    conn.close()
 
+# --- Digital Vault Helpers ---
 def get_financial_year(date_obj):
-    """Calculates the Indian Financial Year (April 1 to March 31)"""
-    if date_obj.month < 4:
-        return f"{date_obj.year - 1}-{str(date_obj.year)[2:]}"
-    else:
-        return f"{date_obj.year}-{str(date_obj.year + 1)[2:]}"
+    if date_obj.month < 4: return f"{date_obj.year - 1}-{str(date_obj.year)[2:]}"
+    else: return f"{date_obj.year}-{str(date_obj.year + 1)[2:]}"
 
-def save_file_to_vault(file_bytes, original_name, doc_type, description="", upload_date=None):
-    if upload_date is None: 
-        upload_date = datetime.date.today()
-        
+def save_file_to_vault(file_bytes, original_name, doc_type, nondh_id=None, description="", upload_date=None):
+    if upload_date is None: upload_date = datetime.date.today()
     fy = get_financial_year(upload_date)
     month_str = upload_date.strftime("%B")
     
-    # Create an organized physical folder structure: vault/FY_2025-26/Signed_PO/
     safe_fy = fy.replace("-", "_")
     folder_path = os.path.join("digital_vault", safe_fy, doc_type.replace(" ", "_"))
     os.makedirs(folder_path, exist_ok=True)
     
-    # Prepend timestamp to avoid overriding files with the same name
     timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
     safe_name = f"{timestamp}_{original_name}"
     file_path = os.path.join(folder_path, safe_name)
     
-    with open(file_path, "wb") as f:
-        f.write(file_bytes)
+    with open(file_path, "wb") as f: f.write(file_bytes)
         
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("INSERT INTO digital_vault (file_name, file_path, upload_date, financial_year, month, doc_type, description) VALUES (?, ?, ?, ?, ?, ?, ?)",
-              (original_name, file_path, upload_date.strftime("%Y-%m-%d"), fy, month_str, doc_type, description))
+    c.execute("INSERT INTO digital_vault (nondh_id, file_name, file_path, upload_date, financial_year, month, doc_type, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+              (nondh_id, original_name, file_path, upload_date.strftime("%Y-%m-%d"), fy, month_str, doc_type, description))
     conn.commit()
     conn.close()
+
+def get_vault_files_by_nondh(nondh_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT file_name, file_path, upload_date, doc_type, description FROM digital_vault WHERE nondh_id = ? ORDER BY id ASC", (nondh_id,))
+    data = c.fetchall()
+    conn.close()
+    return data
 
 def get_vault_files(fy="All", doc_type="All", search_keyword=""):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    query = "SELECT file_name, file_path, upload_date, financial_year, month, doc_type, description FROM digital_vault WHERE 1=1"
+    query = "SELECT nondh_id, file_name, file_path, upload_date, financial_year, month, doc_type, description FROM digital_vault WHERE 1=1"
     params = []
-    
     if fy != "All":
         query += " AND financial_year=?"
         params.append(fy)
@@ -169,17 +168,16 @@ def get_vault_files(fy="All", doc_type="All", search_keyword=""):
     if search_keyword:
         query += " AND (file_name LIKE ? OR description LIKE ?)"
         params.extend([f"%{search_keyword}%", f"%{search_keyword}%"])
-        
     query += " ORDER BY upload_date DESC"
     c.execute(query, tuple(params))
     data = c.fetchall()
     conn.close()
     return data
-# ---------------------------------------------------
+
 init_db()
 
 # ==========================================
-# Permanent Attachments & Parsing (GitHub)
+# Permanent Attachments & Parsing
 # ==========================================
 @st.cache_data(ttl=3600) 
 def load_permanent_context():
@@ -224,7 +222,7 @@ def search_sample_nondh(keyword, month, year):
         subject_str = sub_match.group(1).strip() if sub_match else "Historical Reference"
         orig_date_match = re.search(r'તા\.\s*([^\n]+)', block)
         display_date = orig_date_match.group(1).strip() if orig_date_match else "Unknown"
-        results.append((display_date + " [Old Sample Ref]", subject_str, block))
+        results.append((None, display_date + " [Old Sample Ref]", subject_str, block)) # Added None for ID matching structure
     return results
 
 def parse_markdown_to_parts(text):
@@ -461,8 +459,6 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     
     table3 = doc.add_table(rows=1, cols=2)
     table3.autofit = False
-    
-    # 6.9 Inches ની અંદર રહે તે રીતે પહોળાઈ સેટ કરી છે
     table3.columns[0].width = Inches(5.0)  
     table3.columns[1].width = Inches(1.9)  
     table3.cell(0, 0).width = Inches(5.0)
@@ -494,18 +490,16 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     doc.add_paragraph("        જય ભારત સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેના કીટકશાસ્ત્ર વિભાગ ખાતે નિચેની વસ્તુઓ બિલ સહિત રજુ કરવા વિનંતી.").alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     doc.add_paragraph() 
 
-    # --- વસ્તુઓના લિસ્ટ વાળા ટેબલની ગોઠવણ ---
     table = doc.add_table(rows=1, cols=5)
     table.style = 'Table Grid'
-    table.autofit = False  # <--- આ ઉમેરવું ખૂબ જરૂરી છે
+    table.autofit = False
     
-    # કુલ 6.9 Inches થવું જોઈએ (0.5 + 3.4 + 1.0 + 1.0 + 1.0 = 6.9)
     widths = [Inches(0.5), Inches(3.4), Inches(1.0), Inches(1.0), Inches(1.0)]
     
     headers = ["અ.નં.", "વસ્તુઓના નામ", "જથ્થો", "ભાવ પ્રતિ નંગ", "કુલ રકમ"]
     for i, ht in enumerate(headers):
         table.columns[i].width = widths[i]
-        table.cell(0, i).width = widths[i] # હેડર સેલની પહોળાઈ લોક કરો
+        table.cell(0, i).width = widths[i] 
         table.cell(0, i).text = ht
         p = table.cell(0, i).paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -515,10 +509,7 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     total_amount = 0.0
     for index, row in df_items.iterrows():
         row_cells = table.add_row().cells
-        
-        # દરેક નવી રો ની પહોળાઈ લોક કરો
-        for i in range(5): 
-            row_cells[i].width = widths[i]
+        for i in range(5): row_cells[i].width = widths[i]
 
         row_cells[0].text = str(index + 1)
         row_cells[1].text = str(row.get('Details', ''))
@@ -535,8 +526,7 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
         row_cells[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     total_row = table.add_row().cells
-    for i in range(5): 
-        total_row[i].width = widths[i]
+    for i in range(5): total_row[i].width = widths[i]
 
     total_row[3].text = "Total"
     total_row[3].paragraphs[0].runs[0].bold = True
@@ -662,35 +652,6 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
 
 # --- PERFECT PDF REPLICA: Bill Pasting Form ---
 def set_cell_border(cell, **kwargs):
-    """Helper function to draw borders around specific table cells."""
-    tc = cell._tc
-    tcPr = tc.get_or_add_tcPr()
-    tcBorders = tcPr.first_child_found_in("w:tcBorders")
-    if tcBorders is None:
-        tcBorders = OxmlElement('w:tcBorders')
-        tcPr.append(tcBorders)
-    for edge in ('top', 'left', 'bottom', 'right'):
-        edge_data = kwargs.get(edge)
-        if edge_data:
-            tag = 'w:{}'.format(edge)
-            element = tcBorders.find(qn(tag))
-            if element is None:
-                element = OxmlElement(tag)
-                tcBorders.append(element)
-            for key in ["sz", "val", "color", "space", "shadow"]:
-                if key in edge_data:
-                    element.set(qn('w:{}'.format(key)), str(edge_data[key]))
-
-import io
-from docx import Document
-from docx.shared import Inches, Pt, Mm
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-
-def set_cell_border(cell, **kwargs):
-    """Helper function to draw borders around specific table cells."""
     tc = cell._tc
     tcPr = tc.get_or_add_tcPr()
     tcBorders = tcPr.first_child_found_in("w:tcBorders")
@@ -711,23 +672,17 @@ def set_cell_border(cell, **kwargs):
 
 def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount_in_guj_words, reg_type, reg_page_no, bill_reg_date, bill_reg_page_no, bill_reg_sr_no, item_no, approval_no, approval_date):
     doc = Document()
-    
-    # --- Helper to convert English digits to Gujarati digits ---
     def eng_to_guj(text):
         if not text: return ""
         return str(text).translate(str.maketrans("0123456789", "૦૧૨૩૪૫૬૭૮૯"))
 
-    # Strict A4 Margins
     section = doc.sections[0]
     section.page_width = Mm(210)
     section.page_height = Mm(297)
-    section.left_margin = Inches(0.5)
-    section.right_margin = Inches(0.5)
-    section.top_margin = Inches(0.2)
-    section.bottom_margin = Inches(0.2)
+    section.left_margin, section.right_margin = Inches(0.5), Inches(0.5)
+    section.top_margin, section.bottom_margin = Inches(0.2), Inches(0.2)
     section.gutter = Inches(0)
     
-    # Set base fonts
     style = doc.styles['Normal']
     rFonts = OxmlElement('w:rFonts')
     rFonts.set(qn('w:ascii'), 'Times New Roman')
@@ -735,7 +690,6 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     rFonts.set(qn('w:cs'), 'Shruti')
     style.font._element.append(rFonts)
 
-    # --- PAGE 1 ---
     header_table = doc.add_table(rows=1, cols=3)
     header_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     header_table.columns[0].width = Inches(2.0)
@@ -769,14 +723,12 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     p_col.paragraph_format.space_before = Pt(0) 
     p_col.paragraph_format.space_after = Pt(0)
     run_col = p_col.add_run("N. M. COLLEGE OF AGRICULTURE")
-    run_col.bold = True
-    run_col.font.size = Pt(22) 
+    run_col.bold, run_col.font.size = True, Pt(22) 
     
     p_uni = doc.add_paragraph()
     p_uni.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_uni = p_uni.add_run("Navsari Agricultural University, Navsari.-396450")
-    run_uni.bold = True
-    run_uni.font.size = Pt(20) 
+    run_uni.bold, run_uni.font.size = True, Pt(20) 
     p_uni.paragraph_format.space_after = Pt(10)
     
     line_table = doc.add_table(rows=1, cols=1)
@@ -791,8 +743,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     
     p_note = doc.add_paragraph()
     run_note = p_note.add_run("Note:-")
-    run_note.bold = True
-    run_note.font.size = Pt(15) 
+    run_note.bold, run_note.font.size = True, Pt(15) 
     p_note.paragraph_format.space_after = Pt(6)
     
     def add_bullet(num, text, size=15):
@@ -812,7 +763,6 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     
     doc.add_page_break()
 
-    # --- PAGE 2 ---
     def add_p2_header_row(cell, text, size=10):
         p = cell.paragraphs[0]
         p.paragraph_format.space_before = Pt(0)
@@ -835,8 +785,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     add_p2_header_row(top_table.cell(0,1), ":-")
     
     p_0_2 = top_table.cell(0,2).paragraphs[0]
-    p_0_2.paragraph_format.space_before = Pt(0)
-    p_0_2.paragraph_format.space_after = Pt(0)
+    p_0_2.paragraph_format.space_before, p_0_2.paragraph_format.space_after = Pt(0), Pt(0)
     p_0_2.paragraph_format.left_indent = Inches(0)
     run_bh = p_0_2.add_run(f"{budget_head} \t\t")
     run_bh.font.size = Pt(10)
@@ -857,11 +806,9 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     add_p2_header_row(top_table.cell(3,2), f"{party_name}")
     
     p_cert = doc.add_paragraph()
-    p_cert.paragraph_format.space_before = Pt(6) 
-    p_cert.paragraph_format.space_after = Pt(4)  
+    p_cert.paragraph_format.space_before, p_cert.paragraph_format.space_after = Pt(6), Pt(4)  
     run_cert = p_cert.add_run(":: પ્રમાણપત્ર ::")
-    run_cert.bold = True
-    run_cert.font.size = Pt(14)
+    run_cert.bold, run_cert.font.size = True, Pt(14)
     p_cert.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
     table = doc.add_table(rows=9, cols=2)
@@ -874,67 +821,46 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     
     def add_row(idx, no, text, size=11):
         p_no = table.rows[idx].cells[0].paragraphs[0]
-        p_no.paragraph_format.left_indent = Inches(0) 
-        p_no.paragraph_format.space_before = Pt(0)
-        p_no.paragraph_format.space_after = Pt(0)
+        p_no.paragraph_format.left_indent, p_no.paragraph_format.space_before, p_no.paragraph_format.space_after = Inches(0), Pt(0), Pt(0)
         run_no = p_no.add_run(no)
         run_no.font.size = Pt(9)
         
         p_text = table.rows[idx].cells[1].paragraphs[0]
-        p_text.paragraph_format.left_indent = Inches(0)
-        p_text.paragraph_format.space_before = Pt(0)
-        p_text.paragraph_format.space_after = Pt(2) 
+        p_text.paragraph_format.left_indent, p_text.paragraph_format.space_before, p_text.paragraph_format.space_after = Inches(0), Pt(0), Pt(2) 
         p_text.paragraph_format.line_spacing = 1.0  
         
         run_text = p_text.add_run(text)
         run_text.font.size = Pt(9)
         p_text.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
-    # --- Convert inputs to Gujarati digits ---
     guj_amount = eng_to_guj(f"{amount:.2f}")
     guj_reg_page = eng_to_guj(reg_page_no)
     guj_bill_reg_page = eng_to_guj(bill_reg_page_no)
     guj_bill_reg_sr = eng_to_guj(bill_reg_sr_no)
     guj_bill_date = eng_to_guj(bill_reg_date)
-    
-    # New: Convert Approval Details to Gujarati
     guj_item_no = eng_to_guj(item_no) if item_no else "____________"
     guj_app_no = eng_to_guj(approval_no) if approval_no else "_________________________________________"
     guj_app_date = eng_to_guj(approval_date) if approval_date else "______/______/_________"
 
-    # --- Register Setup ---
     blanks = {
-        "સ્ટોર રોજમેળ": "____________",
-        "ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ)": "____________",
-        "ડેડસ્ટોક": "____________",
-        "ટેલીફોન": "____________",
-        "સ્ટેમ્પ": "____________",
-        "સ્ટેશનરી": "____________",
-        "પરચુરણ માલ સામાન": "____________",
-        "રીપેરીંગ": "____________"
+        "સ્ટોર રોજમેળ": "____________", "ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ)": "____________",
+        "ડેડસ્ટોક": "____________", "ટેલીફોન": "____________", "સ્ટેમ્પ": "____________",
+        "સ્ટેશનરી": "____________", "પરચુરણ માલ સામાન": "____________", "રીપેરીંગ": "____________"
     }
-
     if guj_reg_page:
-        if reg_type in blanks:
-            blanks[reg_type] = f" {guj_reg_page} "
+        if reg_type in blanks: blanks[reg_type] = f" {guj_reg_page} "
 
-    # --- Dynamic Certificates ---
     cert_1 = (f"આ બીલમાં જણાવેલ વસ્તુ ખરીદવાની/રીપેરીંગના ખર્ચની મંજુરી આપવાની સત્તા ગુજરાત રાજય કૃષિ યુનિવર્સિટીઓ "
               f"(સતા સોપણી) નિયમ-૨૦૧૧ ના સ્ટેચ્યુટ નં. ૧૨૧ ની આઇટમ નં {guj_item_no} મુજબ એનાયત થયેલ સત્તા પ્રમાણે "
               f"હેડ ઓફિસ/હેડ ઓફ યુનિટ/યુનિ. ઓફિસર્સ/માન. કુલપતિશ્રીની મંજુરી નં: {guj_app_no} . "
               f"તારીખ: {guj_app_date} થી મંજુરી મળેલ છે. હુકમની નકલ સામેલ છે.")
-
     cert_2 = "આ બીલમાં જણાવેલ ખર્ચ આ વિભાગની આઇ.સી.એ.આર. યોજના બજેટ સદર ૩૦૩/૨૦૯૨ માં સમાવેશ કરવામાં આવેલ છે."
-    
-    cert_3 = (
-        f"બીલમાં દર્શાવેલ માલની ખરીદી બજાર ભાવ તપાસી ભાવો મેળવી સૌથી ઓછા ભાવ મુજબ છે અને સારી સ્થિતિમાં મળેલ છે. "
-        f"જે કચેરીના સ્ટોર રોજમેળ રજી પાના નં. {blanks['સ્ટોર રોજમેળ']}../ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ) "
-        f"રજી. પાના નં. {blanks['ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ)']} ડેડસ્ટોક રજી. નં.... {blanks['ડેડસ્ટોક']} / ટેલીફોન રજી. પાના "
-        f"નં {blanks['ટેલીફોન']} / સ્ટેમ્પ રજી. પાના નં {blanks['સ્ટેમ્પ']} / સ્ટેશનરી રજી. પાના નં. "
-        f"{blanks['સ્ટેશનરી']} .રજીસ્ટરનાં ____________ / પરચુરણ માલ સામાન /.... {blanks['પરચુરણ માલ સામાન']}../ રીપેરીંગ "
-        f"રજી. પાના નં.. {blanks['રીપેરીંગ']} નાં રોજ જમા કરવામાં આવેલ છે."
-    )
-    
+    cert_3 = (f"બીલમાં દર્શાવેલ માલની ખરીદી બજાર ભાવ તપાસી ભાવો મેળવી સૌથી ઓછા ભાવ મુજબ છે અને સારી સ્થિતિમાં મળેલ છે. "
+              f"જે કચેરીના સ્ટોર રોજમેળ રજી પાના નં. {blanks['સ્ટોર રોજમેળ']}../ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ) "
+              f"રજી. પાના નં. {blanks['ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ)']} ડેડસ્ટોક રજી. નં.... {blanks['ડેડસ્ટોક']} / ટેલીફોન રજી. પાના "
+              f"નં {blanks['ટેલીફોન']} / સ્ટેમ્પ રજી. પાના નં {blanks['સ્ટેમ્પ']} / સ્ટેશનરી રજી. પાના નં. "
+              f"{blanks['સ્ટેશનરી']} .રજીસ્ટરનાં ____________ / પરચુરણ માલ સામાન /.... {blanks['પરચુરણ માલ સામાન']}../ રીપેરીંગ "
+              f"રજી. પાના નં.. {blanks['રીપેરીંગ']} નાં રોજ જમા કરવામાં આવેલ છે.")
     cert_4 = f"સદર બીલમાં દર્શાવવામાં આવેલ ખર્ચ સેલ્સ ટેક્ષ / એડી.ટેક્ષ / એકસાઇડયુટી / સેન્ટ્રલ ટેક્ષ વિગેરે પાર્ટીના માન્ય થયેલ ભાવ મુજબ ચકાસણી કરવામાં આવેલ છે. અને તે મુજબ પાર્ટીના બીલમાં દર્શાવ્યા મુજબની રકમ રૂ. {guj_amount}/- (અંકે રૂ. {amount_in_guj_words}) પુરા ચુકવવા ભલામણ કરવામાં આવે છે."
     cert_8 = f"તા. {guj_bill_date} સદર બીલની નોંધ કચેરી ખાતેના બીલ રજી પાના નં. {guj_bill_reg_page} અનુ.નં. {guj_bill_reg_sr} કરવામાં આવેલ છે."
 
@@ -949,16 +875,14 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     add_row(8, "૯.", "સંશોધન નિયામકશ્રીના ૩૦/૧૦/૨૦૨૧ના પરિપત્રનો અમલ કરેલ છે.", size=11)
     
     p_special_note = doc.add_paragraph()
-    p_special_note.paragraph_format.space_before = Pt(0)
-    p_special_note.paragraph_format.space_after = Pt(2) 
+    p_special_note.paragraph_format.space_before, p_special_note.paragraph_format.space_after = Pt(0), Pt(2) 
     p_special_note.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_special_note = p_special_note.add_run("સદરહું ખર્ચ કચેરીની અગત્યની કામગીરીને ધ્યાને લઇ તેમજ યુનિવર્સિટીનાં હિતાર્થે કરવામાં આવેલ છે.")
     run_special_note.font.size = Pt(11)
     
     today_guj = eng_to_guj(datetime.date.today().strftime('%d/%m/%Y'))
     p_loc = doc.add_paragraph()
-    p_loc.paragraph_format.space_before = Pt(2) 
-    p_loc.paragraph_format.space_after = Pt(12)
+    p_loc.paragraph_format.space_before, p_loc.paragraph_format.space_after = Pt(2), Pt(12)
     run_loc = p_loc.add_run(f"સ્થળ : નવસારી\nતારીખ : {today_guj}")
     run_loc.font.size = Pt(12)
     
@@ -1000,14 +924,13 @@ st.title("સાદર નોંધ જનરેટર (Intelligent Sadar Nondh 
 
 api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
 
-# --- ADDED TAB 6 ---
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "નવી સાદર નોંધ (Create)", 
     "જુની નોંધ (Archives)", 
     "ખરીદી હુકમ (Purchase Order)",
     "બિલ પેમેન્ટ (Bill Payment)",
     "બિલ પેસ્ટિંગ (Bill Pasting)",
-    "🗄️ ડિજિટલ આર્કાઇવ (Digital Vault)"  # <-- NEW TAB
+    "🗄️ ડિજિટલ વોલ્ટ & પેમેન્ટ (Vault & Pay)"  # Updated Tab 6
 ])
 
 with tab1:
@@ -1027,10 +950,8 @@ with tab1:
             with st.spinner("સ્ટેચ્યુટ ૧૨૧ ની ચકાસણી અને નોંધ તૈયાર કરવામાં આવી રહી છે..."):
                 try:
                     statute_context, sample_context = load_permanent_context()
-                    
                     genai.configure(api_key=api_key)
                     model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
-                    
                     sys_prompt = f"""
                     You are an expert administrative AI for the Department of Entomology, N. M. College of Agriculture, NAU, Navsari.
                     Your task is to generate a formal 'સાદર નોંધ' in Gujarati.
@@ -1049,24 +970,19 @@ with tab1:
                     જે આપ સાહેબશ્રીને સ્ટેચ્યુટ ૧૨૧ની આઈટમ નંબર [DETERMINED_ITEM_NUMBER] મુજબ એનાયત થયેલ સત્તા અનુસાર સૈદ્ધાંતિક મંજુરી આપવા વિનંતી. સદર ખર્ચ અત્રેના વિભાગમાં ચાલતી આઈ.સી.એ.આર યોજના (બ.સ. ૩૦૩/૨૦૯૨) માં કરવામાં આવશે.
 
                     STATUTE 121 ITEM NUMBER DETERMINATION (CRITICAL INSTRUCTION):
-                    1. You MUST read the 'Sample Nondh Format' provided in the context to find the historically correct 'આઈટમ નંબર' (Item Number) for this type of purchase.
-                    2. Treat the Sample Nondh as the ultimate precedent. If the purchase involves laboratory chemicals, research materials, or AINP scheme-related items, strictly use the exact item number found in the sample (e.g., "૫૪ (i)" or "54 (i)").
-                    3. Only rely on the dense 'Statute 121 Rules' PDF text if the item category is completely new and not covered by the sample document precedent. 
-                    4. Replace [DETERMINED_ITEM_NUMBER] with the exact number in Gujarati format (like ૫૪ (i)). Do not guess or hallucinate numbers like 45 (ii) (ii).
+                    1. Read 'Sample Nondh Format' in context to find historically correct 'આઈટમ નંબર'.
+                    2. Treat Sample Nondh as ultimate precedent (e.g., "૫૪ (i)").
+                    3. Only rely on dense 'Statute 121 Rules' PDF text if completely new.
 
                     TABLE LOGIC:
-                    Analyze the user request to determine if a table is required. 
-                    - If the request is a general administrative note WITHOUT specific items to purchase, DO NOT include a table.
-                    - If the request involves purchasing, requesting, or listing items with quantities and prices, YOU MUST include a markdown table.
-                    
-                    If a table is included, the headers MUST strictly be in ENGLISH and use these EXACT columns:
+                    Analyze user request. If a table is included, headers MUST be strictly ENGLISH:
                     Sr. No. | Details | Required Quantity | Available Pkt/Unit | Unit/Pkt Price | Total Price
                     
                     CRITICAL TABLE RULES:
-                    1. The 'Details' column MUST contain ONLY the item name without the package size (e.g., "ACETIC ACID GLACIAL 99.5% Extra Pure").
-                    2. The 'Available Pkt/Unit' column MUST contain the package size and unit type (e.g., "500 ML", "25 GM", "1 Unit").
-                    3. The 'Required Quantity' and 'Unit/Pkt Price' columns MUST contain pure numbers only (e.g., "1" or "335.95"). Do NOT put units like "ML" or "GM" in these two columns.
-                    4. Do NOT generate a "Grand Total" row. The system will calculate it automatically.
+                    1. 'Details' MUST contain ONLY item name without package size.
+                    2. 'Available Pkt/Unit' MUST contain package size/unit.
+                    3. 'Required Quantity' and 'Unit/Pkt Price' MUST contain pure numbers only.
+                    4. Do NOT generate a "Grand Total" row.
 
                     ખેતીવાડી અધિકારી,કીટકશાસ્ત્ર વિભાગ
                     પ્રોજેકટ ઈન્ચાર્જ,કીટકશાસ્ત્ર વિભાગ
@@ -1075,21 +991,16 @@ with tab1:
                     આચાર્ય અને ડીનશ્રી, ન. મ. કૃષિ મહાવિધાયલય, ન.કૃ.યુ. નવસારી
                     
                     ==== AI STATUTE ANALYSIS ====
-                    1. **Original Statute 121 Details:** - **Item Number Used:** [State the specific rule number you used].
-                        - **Original Statute Text:** [Provide the EXACT quote/sentence directly from the attached Statute 121 PDF for this specific rule number].
-                    2. **Justification:** [Explain exactly WHY this specific statute applies to the requested purchase. Relate the items being bought to the statute's wording].
-                    3. **Similar Precedent from Sample Nondh:** [Find a similar past purchase in the uploaded 'Sample Nondh' context. List its Subject, Date, and the Statute Item Number it used to prove your choice is historically accurate].
-                    4. **Rejected Alternative Statute:** [Find another statute item number from the PDF that looks similar but is INCORRECT (e.g., a rule for furniture instead of chemicals). Quote it and explicitly explain why it is NOT compatible with this purchase].
-                    """
+                    1. **Original Statute 121 Details:** - **Item Number Used:** - **Original Statute Text:**
+                    2. **Justification:**
+                    3. **Similar Precedent from Sample Nondh:** 4. **Rejected Alternative Statute:** """
                     
                     inputs = [sys_prompt, text_prompt]
-                    if uploaded_image:
-                        inputs.append(Image.open(uploaded_image))
+                    if uploaded_image: inputs.append(Image.open(uploaded_image))
                         
                     response = model.generate_content(inputs)
                     res_text = response.text
                     
-                    # Intercept and Split the AI Response safely
                     if "==== AI STATUTE ANALYSIS ====" in res_text:
                         parts = res_text.split("==== AI STATUTE ANALYSIS ====")
                         st.session_state['generated_nondh'] = parts[0].strip()
@@ -1099,13 +1010,10 @@ with tab1:
                         st.session_state['statute_analysis'] = ""
                         
                     st.success("સાદર નોંધ સફળતાપૂર્વક તૈયાર થઈ ગઈ છે!")
-                    
                 except Exception as e:
                     st.error(f"Error generating document: {e}")
 
     if 'generated_nondh' in st.session_state:
-        
-        # FEATURE ADDITION: Display Statute Analysis clearly separated from the Document Draft
         if 'statute_analysis' in st.session_state and st.session_state['statute_analysis']:
             with st.expander("🔍 Statute 121 Analysis & Justification (AI Reasoning)", expanded=True):
                 st.info("આ વિભાગ ફક્ત તમારી જાણકારી માટે છે અને વર્ડ ડોક્યુમેન્ટ (DOCX) માં પ્રિન્ટ થશે નહીં.")
@@ -1115,69 +1023,51 @@ with tab1:
         st.markdown("### ડ્રાફ્ટ એડિટિંગ (Smart Editor)")
         
         pre_text, df, post_text = parse_markdown_to_parts(st.session_state['generated_nondh'])
-        
         edit_pre = st.text_area("ઉપરનું લખાણ:", pre_text, height=150)
         
         if not df.empty:
             st.markdown("#### સ્માર્ટ ટેબલ (Smart Table)")
-            st.info("નોંધ: 'Required Quantity' અથવા 'Unit/Pkt Price' બદલશો તો 'Total Price' અને લખાણમાં રહેલ 'અંદાજિત ખર્ચ' આપોઆપ બદલાઈ જશે.")
-            
             edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
-            
-            # Intelligent Math Calculation using Regex to strip any accidental text
             if 'Required Quantity' in edited_df.columns and 'Unit/Pkt Price' in edited_df.columns and 'Total Price' in edited_df.columns:
-                
-                # Extract pure numbers safely
                 req_qty = edited_df['Required Quantity'].astype(str).str.extract(r'(\d+\.?\d*)')[0].astype(float).fillna(0)
                 unit_price = edited_df['Unit/Pkt Price'].astype(str).str.extract(r'(\d+\.?\d*)')[0].astype(float).fillna(0)
-                
-                # Perform the calculation
                 edited_df['Total Price'] = (req_qty * unit_price).round(2)
-                
-                # Dynamic Grand Total Calculation
                 grand_total_calc = edited_df['Total Price'].sum()
                 st.success(f"**Grand Total (કુલ રકમ): ₹ {grand_total_calc:,.2f}**")
-                
-                # Automatically sync the paragraph text with the accurate Grand Total
                 edit_pre = re.sub(r'(અંદાજિત ખર્ચ\s*).*?(\s*થનાર)', f'\g<1>{grand_total_calc:,.2f}\g<2>', edit_pre)
         else:
             edited_df = pd.DataFrame()
-            st.info("આ નોંધમાં ટેબલની જરૂરિયાત જણાઈ નથી. (No table required for this note based on the context).")
             
         edit_post = st.text_area("નીચેનું લખાણ:", post_text, height=150)
-        
-        # Re-stitch using the custom markdown generator that handles the Grand Total
         final_document = f"{edit_pre}\n\n{df_to_markdown_with_total(edited_df)}\n{edit_post}" if not edited_df.empty else f"{edit_pre}\n\n{edit_post}"
         
         st.markdown("---")
         st.markdown("### દસ્તાવેજ પ્રીવ્યુ (Visual Preview - 20/80 Layout)")
-        
         with st.container(border=True):
             prev_blank, prev_content = st.columns([2, 8]) 
-            with prev_content:
-                st.markdown(final_document)
+            with prev_content: st.markdown(final_document)
         
         st.markdown("---")
         col_save, col_down = st.columns(2)
         with col_save:
-            if st.button("આર્કાઇવમાં સેવ કરો (Save)"):
+            if st.button("આર્કાઇવમાં સેવ કરો (Save Nondh)"):
                 subj = "No Subject"
                 for line in final_document.split('\n'):
                     if "વિષય:" in line:
                         subj = line.replace("વિષય:", "").strip()
                         break
-                save_to_db(subj, final_document)
-                st.success("નોંધ સાચવી લેવામાં આવી છે! (હવે તમે Tab 3 માંથી ખરીદી હુકમ બનાવી શકશો)")
+                # Save Nondh to DB
+                nondh_id = save_to_db(subj, final_document)
+                st.session_state['recent_nondh_id'] = nondh_id
                 
-        with col_down:
-            docx_data = create_docx(final_document)
-            st.download_button(label="Download as Word (DOCX)",
-                               data=docx_data,
-                               file_name=f"Sadar_Nondh_{datetime.date.today().strftime('%d_%m_%Y')}.docx",
-                               mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                # Automatically save the DOCX to the vault linked to this new Nondh
+                docx_data = create_docx(final_document)
+                save_file_to_vault(docx_data, f"Nondh_{nondh_id}_{datetime.date.today().strftime('%d_%m')}.docx", "Sadar Nondh Draft", nondh_id=nondh_id)
+                st.success("નોંધ અને ડ્રાફ્ટ સાચવી લેવામાં આવ્યા છે! (હવે તમે Tab 3 માં જઈ શકો છો)")
 
+# --- TAB 2 (ARCHIVES & UNIFIED VIEW) ---
 with tab2:
-    st.markdown("### 🗄️ જૂના રેકોર્ડ શોધો (Archive Search)")
+    st.markdown("### 🗄️ જૂના રેકોર્ડ અને જોડાયેલ દસ્તાવેજો (Archives & Unified View)")
     search_query = st.text_input("🔍 Smart Search (Type in English or Gujarati)")
     db_records = get_archives("All", "All")
     sample_records = search_sample_nondh("", "All", "All")
@@ -1185,15 +1075,14 @@ with tab2:
 
     def smart_search_gemini(query, records):
         if not query.strip(): return records
-        model = genai.GenerativeModel('gemini-3.1-pro-preview')
-        records_context = ""
-        for i, record in enumerate(records):
-            if len(record) == 3: date, subject, content = record
-            elif len(record) == 2: subject, content = record
-            else: continue 
-            records_context += f"ID: {i} | Subject: {subject} | Content: {content[:150]}...\n"
-        prompt = f"Find matching IDs for: '{query}'. Records: {records_context}. Return ONLY comma-separated IDs (e.g. 0,3). If none, return NONE."
         try:
+            model = genai.GenerativeModel('gemini-3.1-pro-preview')
+            records_context = ""
+            for i, record in enumerate(records):
+                if len(record) == 4: _, _, subject, content = record
+                else: continue 
+                records_context += f"ID: {i} | Subject: {subject} | Content: {content[:150]}...\n"
+            prompt = f"Find matching IDs for: '{query}'. Records: {records_context}. Return ONLY comma-separated IDs (e.g. 0,3). If none, return NONE."
             result = model.generate_content(prompt).text.strip()
             if result == "NONE" or not result: return []
             matched_ids = [int(x.strip()) for x in result.split(",") if x.strip().isdigit()]
@@ -1204,39 +1093,56 @@ with tab2:
     if display_records:
         st.success(f"કુલ {len(display_records)} રેકોર્ડ મળ્યા.")
         for idx, record in enumerate(display_records):
-            if len(record) == 3: date, subject, content = record
-            elif len(record) == 2: subject, content, date = record[0], record[1], "જૂનો રેકોર્ડ"
-            with st.expander(f"{date} - {subject}"):
+            nondh_id, date, subject, content = record[0], record[1], record[2], record[3]
+            
+            with st.expander(f"ID #{nondh_id if nondh_id else 'Ref'} | {date} - {subject}"):
                 st.markdown(content)
-                st.download_button("Download (Word)", data=create_docx(content), file_name=f"Archive_{idx}.docx", key=f"dl_{idx}") 
+                st.download_button("Download Nondh (Word)", data=create_docx(content), file_name=f"Nondh_{nondh_id}.docx", key=f"dl_{idx}") 
+                
+                # --- NEW: Unified View of Vault Files linked to this Nondh ---
+                if nondh_id:
+                    vault_files = get_vault_files_by_nondh(nondh_id)
+                    if vault_files:
+                        st.markdown("---")
+                        st.markdown("#### 📂 જોડાયેલ દસ્તાવેજો (Linked Vault Documents)")
+                        for f_name, f_path, u_date, d_type, desc in vault_files:
+                            col1, col2 = st.columns([8, 2])
+                            with col1: st.caption(f"**{d_type}**: {f_name} ({u_date}) - {desc}")
+                            with col2:
+                                if os.path.exists(f_path):
+                                    with open(f_path, "rb") as f:
+                                        st.download_button("⬇️", data=f.read(), file_name=f_name, key=f"dl_v_{f_path}")
+                                else: st.error("Missing")
 
+# --- TAB 3 (PO) ---
 with tab3:
     st.markdown("### 📝 ખરીદી હુકમ બનાવો (Generate Purchase Order)")
-    st.info("નોંધ મંજૂર થયા પછી સપ્લાયરને ખરીદીનો ઓર્ડર મોકલવા માટે અહીં વિગતો ભરો.")
-    
     st.markdown("#### ૧. મંજૂર થયેલ નોંધ પસંદ કરો (Select Approved Nondh)")
+    
     db_records = get_archives("All", "All")
     options = ["-- જાતે માહિતી ભરો (Manual Entry) --"]
     record_dict = {}
-    for idx, row in enumerate(db_records):
-        if len(row) == 3:
-            label = f"[{idx+1}] {row[0]} - {row[1]}"
-            record_dict[label] = row[2]
+    for row in db_records:
+        if len(row) == 4:
+            label = f"Nondh #{row[0]} - {row[1]} - {row[2]}"
+            record_dict[label] = {"id": row[0], "content": row[3]}
             options.append(label)
-    selected_nondh = st.selectbox("અગાઉ સેવ કરેલ નોંધ પસંદ કરો:", options)
-    
-    st.markdown("#### ૨. સહી કરેલ ખરીદી હુકમ અપલોડ કરો (Upload Signed PO - Optional)")
-    uploaded_po = st.file_uploader("મંજૂર થયેલ/સહીવાળો ઓર્ડર અપલોડ કરો:", type=["pdf", "jpg", "jpeg", "png"], key="po_up")
-    if uploaded_po:
-        file_bytes = uploaded_po.getbuffer()
-        # Save to existing folder structure (optional, you can remove this if you only want the vault)
-        os.makedirs("signed_pos", exist_ok=True)
-        with open(os.path.join("signed_pos", uploaded_po.name), "wb") as f: 
-            f.write(file_bytes)
             
-        # NEW: Automatically save to Vault
-        save_file_to_vault(file_bytes, uploaded_po.name, "Signed Purchase Order", "Auto-uploaded from Tab 3")
-        st.success("સહી કરેલ ફાઈલ વોલ્ટમાં સેવ થઈ ગઈ છે!")
+    selected_nondh = st.selectbox("અગાઉ સેવ કરેલ નોંધ પસંદ કરો:", options)
+    current_nondh_id = record_dict[selected_nondh]["id"] if selected_nondh != "-- જાતે માહિતી ભરો (Manual Entry) --" else None
+
+    st.markdown("#### ૨. સહી કરેલ નોંધ/હુકમ અપલોડ કરો (Upload Signed Docs - Optional)")
+    col_up1, col_up2 = st.columns(2)
+    with col_up1:
+        uploaded_signed_nondh = st.file_uploader("મંજૂર/સહીવાળી નોંધ અપલોડ કરો:", type=["pdf", "jpg", "png"], key="nondh_up")
+        if uploaded_signed_nondh and current_nondh_id:
+            save_file_to_vault(uploaded_signed_nondh.getbuffer(), uploaded_signed_nondh.name, "Signed Nondh", nondh_id=current_nondh_id, description="Uploaded from Tab 3")
+            st.success("સહી કરેલ નોંધ વોલ્ટમાં સેવ થઈ!")
+    with col_up2:
+        uploaded_po = st.file_uploader("સહીવાળો ઓર્ડર (PO) અપલોડ કરો:", type=["pdf", "jpg", "png"], key="po_up")
+        if uploaded_po and current_nondh_id:
+            save_file_to_vault(uploaded_po.getbuffer(), uploaded_po.name, "Signed PO", nondh_id=current_nondh_id, description="Uploaded from Tab 3")
+            st.success("સહી કરેલ PO વોલ્ટમાં સેવ થયો!")
 
     st.markdown("---")
     st.markdown("#### ૩. સપ્લાયર અને ઓર્ડરની વિગત (Supplier & Order Details)")
@@ -1249,45 +1155,48 @@ with tab3:
         po_date = st.date_input("તારીખ (Date)", value=datetime.date.today())
         
     default_df = pd.DataFrame(columns=["Details", "Required Quantity", "Available Pkt/Unit", "Unit/Pkt Price", "Total Price"])
-    if selected_nondh != "-- જાતે માહિતી ભરો (Manual Entry) --":
-        _, session_df, _ = parse_markdown_to_parts(record_dict[selected_nondh])
+    if current_nondh_id:
+        _, session_df, _ = parse_markdown_to_parts(record_dict[selected_nondh]["content"])
         if not session_df.empty: default_df = session_df
     
     po_df = st.data_editor(default_df, num_rows="dynamic", use_container_width=True, key="po_editor")
     
-    if st.button("📄 ખરીદી હુકમ ડાઉનલોડ કરો (Download PO & Send to Bill Payment Queue)"):
+    if st.button("📄 ખરીદી હુકમ ડાઉનલોડ કરો (Generate PO)"):
         if vendor_name and not po_df.empty:
+            if current_nondh_id is None: st.warning("Please select a Nondh to link this PO to the vault.")
+            
             formatted_date = po_date.strftime("%d.%m.%Y")
             grand_total = pd.to_numeric(po_df['Total Price'], errors='coerce').fillna(0).sum()
-            
             po_docx = create_purchase_order_docx(vendor_name, vendor_address, outward_no, formatted_date, po_df)
-            save_po_to_db(vendor_name, outward_no, formatted_date, grand_total)
+            
+            # Save to Workflow DB
+            save_po_to_db(current_nondh_id, vendor_name, outward_no, formatted_date, grand_total)
+            
+            # Auto-save Draft to Vault
+            if current_nondh_id: save_file_to_vault(po_docx, f"Draft_PO_{vendor_name}_{outward_no}.docx", "PO Draft", nondh_id=current_nondh_id)
             
             st.download_button("Download Purchase Order (DOCX)", data=po_docx, file_name=f"PO_{vendor_name}.docx")
-            st.success("ખરીદી હુકમ તૈયાર છે અને પેમેન્ટ માટે Tab 4 માં મોકલી દેવામાં આવ્યો છે!")
+            st.success("ખરીદી હુકમ તૈયાર છે અને પેમેન્ટ માટે Tab 4 માં મોકલી દેવામાં આવ્યો છે! (Draft saved to Vault)")
 
-# --- TAB 4 (Bill Payment ONLY) ---
+# --- TAB 4 (BILL PAYMENT) ---
 with tab4:
     st.markdown("### 💳 બિલ પેમેન્ટ ફોર્મ (Bill Payment Form)")
-    st.info("જે ખરીદીના હુકમ (Purchase Orders) માટે બિલ ચૂકવવાનું બાકી છે, તે જ અહીં દેખાશે.")
     
     unfinished_pos = get_unfinished_pos()
-    
-    if not unfinished_pos:
-        st.success("હાલમાં કોઈ બિલ પેમેન્ટ બાકી નથી! (No unfinished purchase orders).")
+    if not unfinished_pos: st.success("હાલમાં કોઈ બિલ પેમેન્ટ બાકી નથી! (No unfinished purchase orders).")
     else:
         po_dict_tab4 = {}
         po_options_tab4 = []
         for po in unfinished_pos:
-            po_id, v_name, o_no, p_date, amt = po
-            label = f"PO #{o_no} - {v_name} - ₹{amt} ({p_date})"
+            po_id, nondh_id_t4, v_name, o_no, p_date, amt = po
+            label = f"PO #{o_no} - {v_name} - ₹{amt} (Nondh #{nondh_id_t4})"
             po_options_tab4.append(label)
             po_dict_tab4[label] = po
             
-        selected_po_label_t4 = st.selectbox("પેમેન્ટ ફોર્મ માટે ઓર્ડર પસંદ કરો (Select Pending PO):", po_options_tab4, key="po_tab4")
+        selected_po_label_t4 = st.selectbox("પેમેન્ટ ફોર્મ માટે ઓર્ડર પસંદ કરો:", po_options_tab4, key="po_tab4")
         
         if selected_po_label_t4:
-            po_id, v_name, o_no, p_date, amt = po_dict_tab4[selected_po_label_t4]
+            po_id, nondh_id_t4, v_name, o_no, p_date, amt = po_dict_tab4[selected_po_label_t4]
             
             if st.session_state.get("current_po_id_t4") != po_id:
                 st.session_state.current_po_id_t4 = po_id
@@ -1297,249 +1206,181 @@ with tab4:
                 st.session_state.last_invoice = None
 
             st.markdown("#### ઇન્વોઇસ અને બજેટની વિગતો (Invoice Details)")
-            
             col_b1, col_b2 = st.columns(2)
             with col_b1:
                 budget_head = st.text_input("Budget Head No.", value="303/2092 (AINP on Agril Acarology)", key="bh_t4")
                 bill_no = st.text_input("ઇન્વોઇસ/બિલ નંબર (Vendor Bill No.)", value=st.session_state.ext_bill_no)
-                invoice_upload = st.file_uploader("પાર્ટીનું બિલ અપલોડ કરો (Upload Vendor Invoice PDF/Img)", type=["pdf", "jpg", "png"])
+                invoice_upload = st.file_uploader("પાર્ટીનું બિલ અપલોડ કરો (Vendor Invoice PDF/Img)", type=["pdf", "jpg", "png"])
                 
-                if invoice_upload:
-                    file_bytes = invoice_upload.getbuffer()
-                    os.makedirs("vendor_invoices", exist_ok=True)
-                    with open(os.path.join("vendor_invoices", invoice_upload.name), "wb") as f: 
-                        f.write(file_bytes)
-                        
-                    # NEW: Automatically save to Vault
-                    save_file_to_vault(file_bytes, invoice_upload.name, "Party Invoice", f"Auto-uploaded from Tab 4 for PO #{o_no}")
+                if invoice_upload and nondh_id_t4:
+                    save_file_to_vault(invoice_upload.getbuffer(), invoice_upload.name, "Vendor Invoice", nondh_id=nondh_id_t4, description=f"For PO #{o_no}")
                     st.success("ઇન્વોઇસ વોલ્ટમાં સેવ થઈ ગયું!")
-
                     if invoice_upload.name != st.session_state.last_invoice and api_key:
-                        with st.spinner("AI દ્વારા બિલની વિગતો વાંચવામાં આવી રહી છે... (Extracting...)"):
+                        with st.spinner("AI દ્વારા બિલની વિગતો વાંચવામાં આવી રહી છે..."):
                             try:
                                 import json
                                 genai.configure(api_key=api_key)
                                 model = genai.GenerativeModel('gemini-3.1-pro-preview') 
-                                prompt = """
-                                Extract the following from this invoice:
-                                1. Invoice/Bill Number
-                                2. Grand Total Amount (as a pure number)
-                                3. Grand Total Amount in English words (e.g. "Four Thousand Two Hundred Forty Eight")
-                                Return ONLY a valid JSON object in this exact format:
-                                {"bill_no": "INV-123", "amount": 1234.50, "amount_words": "One Thousand..."}
-                                """
+                                prompt = 'Extract: 1. Invoice Number 2. Grand Total Amount (number) 3. Amount in English words. Return ONLY valid JSON: {"bill_no": "INV-123", "amount": 1234.50, "amount_words": "One Thousand..."}'
                                 if invoice_upload.type == "application/pdf":
-                                    reader = PyPDF2.PdfReader(invoice_upload)
-                                    text = "".join([page.extract_text() for page in reader.pages])
+                                    text = "".join([page.extract_text() for page in PyPDF2.PdfReader(invoice_upload).pages])
                                     response = model.generate_content([prompt, text])
-                                else:
-                                    img = Image.open(invoice_upload)
-                                    response = model.generate_content([prompt, img])
-                                
-                                res_text = response.text.strip().replace("```json", "").replace("```", "")
-                                data = json.loads(res_text)
+                                else: response = model.generate_content([prompt, Image.open(invoice_upload)])
+                                data = json.loads(response.text.strip().replace("```json", "").replace("```", ""))
                                 st.session_state.ext_bill_no = str(data.get("bill_no", "INV-"))
                                 st.session_state.ext_amt = float(data.get("amount", amt))
                                 st.session_state.ext_words = str(data.get("amount_words", ""))
                                 st.session_state.last_invoice = invoice_upload.name
                                 st.rerun() 
-                            except Exception as e:
-                                st.warning(f"આપમેળે વિગત મેળવવામાં ભૂલ: {e}. કૃપા કરીને જાતે ભરો.")
+                            except Exception: pass
 
             with col_b2:
                 bill_date = st.date_input("ઇન્વોઇસની તારીખ (Bill Date)", value=datetime.date.today())
                 final_amt = st.number_input("ચૂકવવા પાત્ર રકમ (Amount to Pay)", value=st.session_state.ext_amt, key="amt_t4")
                 
-                # --- NEW FEATURE: Auto-fill English words based on Amount ---
                 col_eng1, col_eng2 = st.columns([3, 1])
-                with col_eng1:
-                    amount_words = st.text_input("રકમ શબ્દોમાં (Amount in Words - English)", value=st.session_state.ext_words, placeholder="e.g., Four Thousand Two Hundred Forty Eight")
+                with col_eng1: amount_words = st.text_input("રકમ શબ્દોમાં (English Words)", value=st.session_state.ext_words)
                 with col_eng2:
                     st.write("") 
-                    if st.button("✨ AI થી ભરો", key="auto_fill_eng_t4"):
-                        if api_key:
-                            with st.spinner("Converting to words..."):
-                                try:
-                                    genai.configure(api_key=api_key)
-                                    model = genai.GenerativeModel('gemini-3.1-pro-preview')
-                                    prompt = f"Convert the number {final_amt} into English words (capitalize the first letter of each word). Return ONLY the text, nothing else. Example: for 3956.50 return 'Three Thousand Nine Hundred Fifty Six And Fifty Paise'."
-                                    res = model.generate_content(prompt)
-                                    st.session_state.ext_words = res.text.strip()
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error("AI Error.")
-                        else:
-                            st.warning("API Key is required!")
+                    if st.button("✨ AI થી ભરો", key="auto_eng_t4") and api_key:
+                        try:
+                            genai.configure(api_key=api_key)
+                            res = genai.GenerativeModel('gemini-3.1-pro-preview').generate_content(f"Convert number {final_amt} to English words.")
+                            st.session_state.ext_words = res.text.strip()
+                            st.rerun()
+                        except: pass
             
             st.markdown("---")
-            if st.button("📄 Generate Bill Payment Form"):
-                if not amount_words: st.error("Please enter the amount in words!")
-                else:
-                    bp_docx = create_bill_payment_form(budget_head, bill_no, bill_date.strftime("%d/%m/%Y"), v_name, final_amt, amount_words)
-                    st.download_button("Download Bill Payment Form", data=bp_docx, file_name=f"Payment_Form_{v_name}.docx")
+            col_bp_d, col_bp_u = st.columns(2)
+            with col_bp_d:
+                if st.button("📄 Generate Bill Payment Form"):
+                    if amount_words:
+                        bp_docx = create_bill_payment_form(budget_head, bill_no, bill_date.strftime("%d/%m/%Y"), v_name, final_amt, amount_words)
+                        if nondh_id_t4: save_file_to_vault(bp_docx, f"Draft_BP_{v_name}.docx", "Bill Payment Draft", nondh_id=nondh_id_t4)
+                        st.download_button("Download Bill Payment", data=bp_docx, file_name=f"Payment_Form_{v_name}.docx")
+            with col_bp_u:
+                signed_bp_upload = st.file_uploader("સહીવાળું પેમેન્ટ ફોર્મ અપલોડ કરો:", type=["pdf", "jpg", "png"], key="signed_bp")
+                if signed_bp_upload and nondh_id_t4:
+                    save_file_to_vault(signed_bp_upload.getbuffer(), signed_bp_upload.name, "Signed Bill Payment", nondh_id=nondh_id_t4)
+                    st.success("સહી કરેલ ફોર્મ વોલ્ટમાં સેવ થઈ ગયું!")
 
-# --- TAB 5 (Bill Pasting & Mark Paid ONLY) ---
+# --- TAB 5 (BILL PASTING) ---
 with tab5:
     st.markdown("### 📑 બિલ પેસ્ટિંગ અને પ્રમાણપત્ર (Bill Pasting Form)")
     
-    if "auto_guj_words" not in st.session_state:
-        st.session_state.auto_guj_words = ""
-
+    if "auto_guj_words" not in st.session_state: st.session_state.auto_guj_words = ""
     unfinished_pos_t5 = get_unfinished_pos()
     
-    if not unfinished_pos_t5:
-        st.success("હાલમાં કોઈ બિલ પેમેન્ટ બાકી નથી! (No unfinished purchase orders).")
+    if not unfinished_pos_t5: st.success("હાલમાં કોઈ બિલ પેમેન્ટ બાકી નથી!")
     else:
         po_dict_tab5 = {}
         po_options_tab5 = []
         for po in unfinished_pos_t5:
-            po_id, v_name, o_no, p_date, amt = po
-            label = f"PO #{o_no} - {v_name} - ₹{amt} ({p_date})"
+            po_id, nondh_id_t5, v_name, o_no, p_date, amt = po
+            label = f"PO #{o_no} - {v_name} - ₹{amt} (Nondh #{nondh_id_t5})"
             po_options_tab5.append(label)
             po_dict_tab5[label] = po
             
         selected_po_label_t5 = st.selectbox("પેસ્ટિંગ ફોર્મ માટે ઓર્ડર પસંદ કરો:", po_options_tab5, key="po_tab5")
         
         if selected_po_label_t5:
-            po_id_t5, v_name_t5, o_no_t5, p_date_t5, amt_t5 = po_dict_tab5[selected_po_label_t5]
+            po_id_t5, nondh_id_t5, v_name_t5, o_no_t5, p_date_t5, amt_t5 = po_dict_tab5[selected_po_label_t5]
 
             col_p1, col_p2 = st.columns(2)
             with col_p1:
                 budget_head_pst = st.text_input("Budget Head No.", value="303/2092 (AINP on Agril Acarology)", key="bh_t5")
-                grant_year = st.text_input("ફાળવેલ ગ્રાન્ટ વર્ષ (Grant Year)", value="", placeholder="હાથેથી લખવા માટે ખાલી છોડી દો")
-                party_name_pst = st.text_input("પાર્ટીનું નામ (Party Name)", value=v_name_t5, key="party_t5")
+                grant_year = st.text_input("ફાળવેલ ગ્રાન્ટ વર્ષ", value="")
+                party_name_pst = st.text_input("પાર્ટીનું નામ", value=v_name_t5, key="party_t5")
             with col_p2:
-                final_amt_pst = st.number_input("બીલની કુલ રકમ (Amount)", value=float(amt_t5), key="amt_t5")
-                
+                final_amt_pst = st.number_input("બીલની કુલ રકમ", value=float(amt_t5), key="amt_t5")
                 col_guj1, col_guj2 = st.columns([3, 1])
-                with col_guj1:
-                    amt_words_guj = st.text_input("રકમ શબ્દોમાં (ગુજરાતીમાં)", value=st.session_state.auto_guj_words, placeholder="દા.ત., ત્રણ હજાર નવસો છપ્પન")
+                with col_guj1: amt_words_guj = st.text_input("રકમ ગુજરાતીમાં", value=st.session_state.auto_guj_words)
                 with col_guj2:
                     st.write("") 
-                    if st.button("✨ AI થી ભરો"):
-                        if api_key:
-                            with st.spinner("અનુવાદ થઈ રહ્યો છે..."):
-                                try:
-                                    genai.configure(api_key=api_key)
-                                    model = genai.GenerativeModel('gemini-3.1-pro-preview')
-                                    prompt = f"Translate the number {final_amt_pst} into Gujarati words. Return ONLY the Gujarati translation. Example: for 3956 return 'ત્રણ હજાર નવસો છપ્પન'."
-                                    res = model.generate_content(prompt)
-                                    st.session_state.auto_guj_words = res.text.strip()
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error("AI Error.")
-                        else:
-                            st.warning("API Key is required!")
+                    if st.button("✨ AI થી ભરો", key="ai_guj") and api_key:
+                        try:
+                            genai.configure(api_key=api_key)
+                            res = genai.GenerativeModel('gemini-3.1-pro-preview').generate_content(f"Translate {final_amt_pst} to Gujarati words. ONLY words.")
+                            st.session_state.auto_guj_words = res.text.strip()
+                            st.rerun()
+                        except: pass
                             
-            st.markdown("#### 📝 મંજુરીની વિગતો (Approval Details - મુદ્દા નં. ૧)")
+            st.markdown("#### 📝 મંજુરી અને રજીસ્ટરની વિગતો")
             col_a1, col_a2, col_a3 = st.columns(3)
-            with col_a1:
-                item_no_pst = st.text_input("આઇટમ નં. (Item No.)", value="", placeholder="દા.ત. 14")
-            with col_a2:
-                approval_no_pst = st.text_input("મંજુરી નં. (Approval No.)", value="", placeholder="દા.ત. ACN/123/2026")
-            with col_a3:
-                approval_date_pst = st.text_input("મંજુરી તારીખ (Approval Date)", value="", placeholder="DD/MM/YYYY")
+            with col_a1: item_no_pst = st.text_input("આઇટમ નં.", value="")
+            with col_a2: approval_no_pst = st.text_input("મંજુરી નં.", value="")
+            with col_a3: approval_date_pst = st.text_input("મંજુરી તારીખ", value="")
                 
-            st.markdown("#### 📝 રજીસ્ટર અને નોંધની વિગતો (Register Details - મુદ્દા નં. ૩ અને ૮)")
             col_r1, col_r2 = st.columns(2)
             with col_r1:
-                reg_type = st.selectbox("કયા રજીસ્ટરમાં નોંધ કરી? (મુદ્દા નં. ૩)", ["ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ)", "ડેડસ્ટોક", "સ્ટોર રોજમેળ", "ટેલીફોન", "સ્ટેમ્પ", "સ્ટેશનરી", "પરચુરણ માલ સામાન", "રીપેરીંગ"])
-                reg_page_no = st.text_input("રજીસ્ટર પાના નં. (Register Page No.)", value="")
+                reg_type = st.selectbox("કયા રજીસ્ટરમાં નોંધ કરી?", ["ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ)", "ડેડસ્ટોક", "સ્ટોર રોજમેળ", "ટેલીફોન", "સ્ટેમ્પ", "સ્ટેશનરી", "પરચુરણ માલ સામાન", "રીપેરીંગ"])
+                reg_page_no = st.text_input("રજીસ્ટર પાના નં.", value="")
             with col_r2:
-                bill_reg_date = st.date_input("બીલ રજીસ્ટરમાં નોંધની તારીખ (મુદ્દા નં. ૮)", value=datetime.date.today())
-                bill_reg_page_no = st.text_input("બીલ રજી પાના નં. (Bill Reg. Page No.)", value="")
-                bill_reg_sr_no = st.text_input("બીલ રજી અનુ. નં. (Bill Reg. Serial No.)", value="")
+                bill_reg_date = st.date_input("બીલ રજી. તારીખ", value=datetime.date.today())
+                bill_reg_page_no = st.text_input("બીલ રજી પાના નં.", value="")
+                bill_reg_sr_no = st.text_input("બીલ રજી અનુ. નં.", value="")
                 
             st.markdown("---")
-            col_btn_pst1, col_btn_pst2 = st.columns(2)
-            
-            with col_btn_pst1:
-                if st.button("📑 Generate Exact Bill Pasting Form"):
-                    if not amt_words_guj:
-                        st.error("કૃપા કરીને રકમ શબ્દોમાં (ગુજરાતીમાં) લખો અથવા 'AI થી ભરો' બટન દબાવો.")
-                    elif not reg_page_no or not bill_reg_page_no or not bill_reg_sr_no:
-                        st.warning("કૃપા કરીને રજીસ્ટરના પાના નંબર અને અનુક્રમ નંબર ભરો.")
-                    else:
-                        bill_reg_date_str = bill_reg_date.strftime("%d/%m/%Y")
-                        
-                        # Added new parameters to function call
-                        pst_docx = create_bill_pasting_form(
-                            budget_head_pst, grant_year, party_name_pst, final_amt_pst, 
-                            amt_words_guj, reg_type, reg_page_no, bill_reg_date_str, 
-                            bill_reg_page_no, bill_reg_sr_no, item_no_pst, approval_no_pst, approval_date_pst
-                        )
+            col_pst_gen, col_pst_up = st.columns(2)
+            with col_pst_gen:
+                if st.button("📑 Generate Bill Pasting Form"):
+                    if amt_words_guj and reg_page_no and bill_reg_page_no and bill_reg_sr_no:
+                        pst_docx = create_bill_pasting_form(budget_head_pst, grant_year, party_name_pst, final_amt_pst, amt_words_guj, reg_type, reg_page_no, bill_reg_date.strftime("%d/%m/%Y"), bill_reg_page_no, bill_reg_sr_no, item_no_pst, approval_no_pst, approval_date_pst)
+                        if nondh_id_t5: save_file_to_vault(pst_docx, f"Draft_Pasting_{v_name_t5}.docx", "Bill Pasting Draft", nondh_id=nondh_id_t5)
                         st.download_button("Download Pasting Form", data=pst_docx, file_name=f"Pasting_Form_{v_name_t5}.docx")
-            
-            with col_btn_pst2:
-                if st.button("✅ બિલ પેમેન્ટ પૂરું કરો (Mark as Paid)", key="mark_paid"):
-                    mark_po_as_paid(po_id_t5)
-                    st.success("ઓર્ડર પેમેન્ટ લિસ્ટમાંથી દૂર કરવામાં આવ્યો છે! રિફ્રેશ કરો.")
-                    st.rerun()
-# --- TAB 6 (Digital Vault / Archive) ---
+                    else: st.warning("કૃપા કરીને જરૂરી માહિતી ભરો.")
+            with col_pst_up:
+                signed_pst_upload = st.file_uploader("સહીવાળું પેસ્ટિંગ ફોર્મ અપલોડ કરો:", type=["pdf", "jpg", "png"], key="signed_pst")
+                if signed_pst_upload and nondh_id_t5:
+                    save_file_to_vault(signed_pst_upload.getbuffer(), signed_pst_upload.name, "Signed Bill Pasting", nondh_id=nondh_id_t5)
+                    st.success("સહી કરેલ ફોર્મ વોલ્ટમાં સેવ થઈ ગયું! (હવે Tab 6 માં જઈ બિલ Mark as Paid કરો)")
+
+# --- TAB 6 (DIGITAL VAULT & PAYMENT CLOSURE) ---
 with tab6:
-    st.markdown("### 🗄️ ડિજિટલ આર્કાઇવ અને ડોક્યુમેન્ટ વોલ્ટ (Digital Vault)")
-    st.info("અહીં તમે નાણાકીય વર્ષ (Financial Year) મુજબ તમારા તમામ સહી કરેલા ડોક્યુમેન્ટ્સ અને બિલો સાચવી અને શોધી શકશો.")
+    st.markdown("### 🗄️ ડિજિટલ વોલ્ટ અને પેમેન્ટ ક્લોઝર (Vault & Payment Closure)")
+    
+    # Section A: Mark as Paid
+    with st.expander("✅ બાકી પેમેન્ટ ક્લિયર કરો (Pending Payments to Mark as Paid)", expanded=True):
+        pending_pos = get_unfinished_pos()
+        if not pending_pos: st.info("કોઈ પેમેન્ટ બાકી નથી.")
+        else:
+            p_dict = {f"PO #{p[3]} - {p[2]} (₹{p[5]})": p for p in pending_pos}
+            sel_pay = st.selectbox("પેમેન્ટ થયેલ ઓર્ડર પસંદ કરો:", list(p_dict.keys()))
+            if sel_pay:
+                po_data = p_dict[sel_pay]
+                col_pay1, col_pay2 = st.columns(2)
+                with col_pay1: pay_info = st.text_input("પેમેન્ટની વિગત (UTR / Cheque No. / Date) - Optional")
+                with col_pay2:
+                    st.write("")
+                    if st.button("Mark as Paid & Close Workflow", type="primary"):
+                        mark_po_as_paid(po_data[0], pay_info)
+                        st.success("પેમેન્ટ નોંધાઈ ગયું છે અને ફાઈલ ક્લોઝ થઈ ગઈ છે!")
+                        st.rerun()
 
-    # Section A: Manual Upload
-    with st.expander("➕ નવું ડોક્યુમેન્ટ અપલોડ કરો (Upload New Document)", expanded=False):
-        col_v1, col_v2 = st.columns(2)
-        with col_v1:
-            vault_upload = st.file_uploader("ફાઈલ પસંદ કરો (PDF, JPG, PNG)", type=["pdf", "jpg", "jpeg", "png"])
-            vault_doc_type = st.selectbox("ડોક્યુમેન્ટનો પ્રકાર (Document Type)", 
-                                          ["Signed Nondh", "Party Invoice", "Signed Purchase Order", "Approval Letter", "Other"])
-        with col_v2:
-            vault_date = st.date_input("તારીખ પસંદ કરો (Date - determines Financial Year)", value=datetime.date.today())
-            vault_desc = st.text_input("ટૂંકી વિગત (Short Description/Tags)", placeholder="દા.ત., મંજુરી નોંધ સહીવાળી")
-            
-        if st.button("💾 વોલ્ટમાં સાચવો (Save to Vault)"):
-            if vault_upload:
-                save_file_to_vault(vault_upload.getbuffer(), vault_upload.name, vault_doc_type, vault_desc, vault_date)
-                st.success("ફાઈલ સફળતાપૂર્વક વોલ્ટમાં સચવાઈ ગઈ છે!")
-            else:
-                st.warning("કૃપા કરીને ફાઈલ અપલોડ કરો.")
-
+    # Section B: General Vault Search
     st.markdown("---")
+    st.markdown("#### 🔍 તમામ વોલ્ટ ડોક્યુમેન્ટ શોધો (Search All Vault Docs)")
     
-    # Section B: Filter and Display
-    st.markdown("#### 🔍 ડોક્યુમેન્ટ શોધો (Search & Filter)")
-    
-    # Dynamic Financial Year Options based on current date +/- a few years
     current_year = datetime.date.today().year
     fy_options = ["All"] + [f"{y}-{str(y+1)[2:]}" for y in range(current_year-2, current_year+3)][::-1]
     
     col_f1, col_f2, col_f3 = st.columns(3)
-    with col_f1:
-        filter_fy = st.selectbox("નાણાકીય વર્ષ (Financial Year)", fy_options)
-    with col_f2:
-        filter_type = st.selectbox("પ્રકાર (Type)", ["All", "Signed Nondh", "Party Invoice", "Signed Purchase Order", "Approval Letter", "Other"])
-    with col_f3:
-        search_kw = st.text_input("શબ્દથી શોધો (Search by Name/Tag)")
+    with col_f1: filter_fy = st.selectbox("નાણાકીય વર્ષ (Financial Year)", fy_options)
+    with col_f2: filter_type = st.selectbox("પ્રકાર (Type)", ["All", "Sadar Nondh Draft", "Signed Nondh", "PO Draft", "Signed PO", "Vendor Invoice", "Bill Payment Draft", "Signed Bill Payment", "Bill Pasting Draft", "Signed Bill Pasting", "Other"])
+    with col_f3: search_kw = st.text_input("શબ્દથી શોધો (Search by Name/Tag)")
 
     vault_records = get_vault_files(filter_fy, filter_type, search_kw)
-    
-    if not vault_records:
-        st.info("કોઈ ડોક્યુમેન્ટ મળ્યા નથી. (No documents found matching the criteria).")
+    if not vault_records: st.info("કોઈ ડોક્યુમેન્ટ મળ્યા નથી.")
     else:
         st.success(f"કુલ {len(vault_records)} ડોક્યુમેન્ટ્સ મળ્યા.")
-        
-        # Display as a clean list with download buttons
         for idx, record in enumerate(vault_records):
-            f_name, f_path, u_date, fy, month, d_type, desc = record
-            
+            n_id, f_name, f_path, u_date, fy, month, d_type, desc = record
             with st.container(border=True):
                 col_info, col_btn = st.columns([8, 2])
                 with col_info:
                     st.markdown(f"**{f_name}**")
-                    st.caption(f"🗓️ {u_date} | 📁 {fy} ({month}) | 🏷️ {d_type} | 📝 {desc}")
+                    st.caption(f"🗓️ {u_date} | 📁 {fy} ({month}) | 🏷️ {d_type} | 🔗 Nondh ID: {n_id if n_id else 'None'}")
                 with col_btn:
-                    # Read file for download
                     if os.path.exists(f_path):
                         with open(f_path, "rb") as f:
-                            st.download_button(
-                                label="⬇️ Download",
-                                data=f.read(),
-                                file_name=f_name,
-                                key=f"dl_vault_{idx}"
-                            )
-                    else:
-                        st.error("File missing from disk")
+                            st.download_button("⬇️ Download", data=f.read(), file_name=f_name, key=f"dl_vault_main_{idx}")
