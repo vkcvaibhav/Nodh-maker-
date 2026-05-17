@@ -1230,10 +1230,30 @@ with tab4:
                             except Exception as e:
                                 st.warning(f"આપમેળે વિગત મેળવવામાં ભૂલ: {e}. કૃપા કરીને જાતે ભરો.")
 
-            with col_b2:
+           with col_b2:
                 bill_date = st.date_input("ઇન્વોઇસની તારીખ (Bill Date)", value=datetime.date.today())
                 final_amt = st.number_input("ચૂકવવા પાત્ર રકમ (Amount to Pay)", value=st.session_state.ext_amt, key="amt_t4")
-                amount_words = st.text_input("રકમ શબ્દોમાં (Amount in Words - English)", value=st.session_state.ext_words, placeholder="e.g., Four Thousand Two Hundred Forty Eight")
+                
+                # --- NEW FEATURE: Auto-fill English words based on Amount ---
+                col_eng1, col_eng2 = st.columns([3, 1])
+                with col_eng1:
+                    amount_words = st.text_input("રકમ શબ્દોમાં (Amount in Words - English)", value=st.session_state.ext_words, placeholder="e.g., Four Thousand Two Hundred Forty Eight")
+                with col_eng2:
+                    st.write("") 
+                    if st.button("✨ AI થી ભરો", key="auto_fill_eng_t4"):
+                        if api_key:
+                            with st.spinner("Converting to words..."):
+                                try:
+                                    genai.configure(api_key=api_key)
+                                    model = genai.GenerativeModel('gemini-3.1-pro-preview')
+                                    prompt = f"Convert the number {final_amt} into English words (capitalize the first letter of each word). Return ONLY the text, nothing else. Example: for 3956.50 return 'Three Thousand Nine Hundred Fifty Six And Fifty Paise'."
+                                    res = model.generate_content(prompt)
+                                    st.session_state.ext_words = res.text.strip()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error("AI Error.")
+                        else:
+                            st.warning("API Key is required!")
             
             st.markdown("---")
             if st.button("📄 Generate Bill Payment Form"):
