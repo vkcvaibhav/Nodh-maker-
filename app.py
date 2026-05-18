@@ -1471,18 +1471,28 @@ with tab3:
                 
     selected_nondh = st.selectbox("અગાઉ સેવ કરેલ નોંધ પસંદ કરો:", options)
     
-    st.markdown("#### ૨. સહી કરેલ ખરીદી હુકમ અપલોડ કરો (Upload Signed PO - Optional)")
-    uploaded_po = st.file_uploader("મંજૂર થયેલ/સહીવાળો ઓર્ડર અપલોડ કરો:", type=["pdf", "jpg", "jpeg", "png"], key="po_up")
-    if uploaded_po:
-        file_bytes = uploaded_po.getbuffer()
-        # Save to existing folder structure (optional, you can remove this if you only want the vault)
-        os.makedirs("signed_pos", exist_ok=True)
-        with open(os.path.join("signed_pos", uploaded_po.name), "wb") as f: 
-            f.write(file_bytes)
-            
-        # NEW: Automatically save to Vault
-        save_file_to_vault(file_bytes, uploaded_po.name, "Signed Purchase Order", "Auto-uploaded from Tab 3")
-        st.success("સહી કરેલ ફાઈલ વોલ્ટમાં સેવ થઈ ગઈ છે!")
+    # --- Extract Nondh ID early so we can link the upload to it ---
+    current_nondh_id = None
+    if selected_nondh != "-- જાતે માહિતી ભરો (Manual Entry) --":
+        import re
+        match = re.search(r'\[(\d+)\]', selected_nondh)
+        if match:
+            current_nondh_id = int(match.group(1))
+
+    st.markdown("#### ૨. સહી કરેલ નોંધ અપલોડ કરો (Upload Signed Nondh - Optional)")
+    uploaded_nondh = st.file_uploader("મંજૂર થયેલ/સહીવાળી નોંધ અપલોડ કરો:", type=["pdf", "jpg", "jpeg", "png"], key="nondh_up")
+    
+    if uploaded_nondh:
+        if not current_nondh_id:
+            st.warning("ફાઈલ અપલોડ કરતા પહેલા ઉપરથી 'અગાઉ સેવ કરેલ નોંધ' પસંદ કરો!")
+        else:
+            # Check if already uploaded this session to prevent duplicates!
+            if st.session_state.get(f"uploaded_nondh_{current_nondh_id}") != uploaded_nondh.name:
+                file_bytes = uploaded_nondh.getbuffer()
+                # Use explicit nondh_id keyword to link it perfectly!
+                save_file_to_vault(file_bytes, uploaded_nondh.name, "Signed Nondh", nondh_id=current_nondh_id, description="Auto-uploaded from Tab 3")
+                st.session_state[f"uploaded_nondh_{current_nondh_id}"] = uploaded_nondh.name
+                st.success("સહી કરેલ નોંધ વોલ્ટમાં સાચવી લેવાઈ છે!")
 
     st.markdown("---")
     st.markdown("#### ૩. સપ્લાયર અને ઓર્ડરની વિગત (Supplier & Order Details)")
