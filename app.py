@@ -1867,13 +1867,22 @@ with tab6:
     else:
         st.success(f"કુલ {len(vault_records)} ડોક્યુમેન્ટ્સ મળ્યા.")
         for idx, record in enumerate(vault_records):
-            n_id, f_name, f_path, u_date, fy, month, d_type, desc = record
+            # નવું અનપેકિંગ (v_id ઉમેર્યો છે)
+            v_id, n_id, f_name, f_path, u_date, fy, month, d_type, desc = record
+            
             with st.container(border=True):
-                col_info, col_btn = st.columns([8, 2])
+                # 3 કોલમ બનાવ્યા: માહિતી માટે, ડાઉનલોડ માટે અને ડિલીટ માટે
+                col_info, col_btn1, col_btn2 = st.columns([6, 2, 2])
                 with col_info:
                     st.markdown(f"**{f_name}**")
                     st.caption(f"🗓️ {u_date} | 📁 {fy} ({month}) | 🏷️ {d_type} | 🔗 Nondh ID: {n_id if n_id else 'None'}")
-                with col_btn:
+                with col_btn1:
                     if os.path.exists(f_path):
                         with open(f_path, "rb") as f:
-                            st.download_button("⬇️ Download", data=f.read(), file_name=f_name, key=f"dl_vault_main_{idx}")
+                            st.download_button("⬇️ Download", data=f.read(), file_name=f_name, key=f"dl_vault_main_{v_id}")
+                with col_btn2:
+                    # --- નવું: Delete બટન ---
+                    if st.button("🗑️ Delete", key=f"del_vault_{v_id}"):
+                        delete_vault_record(v_id, n_id, f_path)
+                        st.error(f"'{f_name}' અને તેની નોંધ કાયમ માટે રદ કરવામાં આવી છે!")
+                        st.rerun()
