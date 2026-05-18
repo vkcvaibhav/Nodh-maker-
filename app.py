@@ -1563,6 +1563,7 @@ with tab4:
                 st.session_state.current_po_id_t4 = po_id
                 st.session_state.ext_bill_no = "INV-"
                 st.session_state.ext_amt = float(amt)
+                st.session_state.amt_t4 = float(amt)
                 st.session_state.ext_words = ""
                 st.session_state.last_invoice = None
 
