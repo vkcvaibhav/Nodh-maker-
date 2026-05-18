@@ -1588,32 +1588,41 @@ with tab4:
                         with st.spinner("AI દ્વારા બિલની વિગતો વાંચવામાં આવી રહી છે... (Extracting...)"):
                             try:
                                 import json
+                                import re  # ટેક્સ્ટ સાફ કરવા માટે
                                 genai.configure(api_key=api_key)
                                 model = genai.GenerativeModel('gemini-3.1-pro-preview') 
-                                # --- NEW: Smart AI Prompt with PO Amount Context ---
+                                
                                 prompt = f"""
                                 You are an intelligent accounting AI. The approved Purchase Order (PO) amount for this transaction is ₹{amt}.
                                 Carefully analyze the uploaded invoice and extract the following:
                                 
                                 1. Invoice/Bill Number.
-                                2. Final Payable Amount: Look for terms like 'Grand Total', 'Invoice Total', 'Net Payable', or 'Total Amount'. Use your intelligence to understand the invoice structure and identify the final amount including taxes. Logically compare it with the PO amount (₹{amt}) to ensure you pick the correct total. Return it as a pure number.
-                                3. Final Payable Amount in English words (e.g. "Four Thousand Two Hundred Forty Eight").
+                                2. Final Payable Amount: Look for terms like 'Grand Total', 'Invoice Total', 'Net Payable', or 'Total Amount'. Use your intelligence to understand the invoice structure and identify the final amount including taxes. Logically compare it with the PO amount (₹{amt}) to ensure you pick the correct total. Return it as a PURE NUMBER WITHOUT COMMAS (e.g. 3894.00).
+                                3. Final Payable Amount in English words.
                                 
                                 Return ONLY a valid JSON object in this exact format:
                                 {{"bill_no": "INV-123", "amount": 1234.50, "amount_words": "One Thousand Two Hundred..."}}
                                 """
+                                
+                                # --- મોટો સુધારો: PyPDF2 કાઢીને PDF સીધી જ Gemini ને આપો ---
                                 if invoice_upload.type == "application/pdf":
-                                    reader = PyPDF2.PdfReader(invoice_upload)
-                                    text = "".join([page.extract_text() for page in reader.pages])
-                                    response = model.generate_content([prompt, text])
+                                    doc_parts = [{"mime_type": "application/pdf", "data": invoice_upload.getvalue()}]
+                                    response = model.generate_content([prompt, doc_parts[0]])
                                 else:
                                     img = Image.open(invoice_upload)
                                     response = model.generate_content([prompt, img])
                                 
                                 res_text = response.text.strip().replace("```json", "").replace("```", "")
                                 data = json.loads(res_text)
+                                
+                                # --- બીજો સુધારો: રકમમાંથી કોમા (,) અને અન્ય ચિન્હો સાફ કરો ---
+                                raw_amount = data.get("amount", amt)
+                                if isinstance(raw_amount, str):
+                                    # આ કોડ 3,894.00 ને 3894.00 માં ફેરવી નાખશે
+                                    raw_amount = re.sub(r'[^\d.]', '', str(raw_amount))
+                                
                                 st.session_state.ext_bill_no = str(data.get("bill_no", "INV-"))
-                                st.session_state.ext_amt = float(data.get("amount", amt))
+                                st.session_state.ext_amt = float(raw_amount)
                                 st.session_state.ext_words = str(data.get("amount_words", ""))
                                 st.session_state.last_invoice = invoice_upload.name
                                 st.rerun() 
