@@ -1651,7 +1651,13 @@ with tab4:
                 if not amount_words: st.error("Please enter the amount in words!")
                 else:
                     bp_docx = create_bill_payment_form(budget_head, bill_no, bill_date.strftime("%d/%m/%Y"), v_name, final_amt, amount_words)
-                    st.download_button("Download Bill Payment Form", data=bp_docx, file_name=f"Payment_Form_{v_name}.docx")
+              st.download_button(
+                  label="Download Bill Payment Form", 
+                  data=bp_docx, 
+                  file_name=f"Payment_Form_{v_name}.docx",
+                  on_click=mark_po_as_payment_generated,
+                  args=(po_id,)
+              )
 
 # --- TAB 5 (Bill Pasting & Mark Paid ONLY) ---
 with tab5:
