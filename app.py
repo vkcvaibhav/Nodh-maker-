@@ -1463,7 +1463,13 @@ with tab3:
     options = ["-- જાતે માહિતી ભરો (Manual Entry) --"]
     record_dict = {}
     for idx, row in enumerate(db_records):
-        if len(row) == 3:
+        # The database returns 4 items: id, date, subject, content
+        if len(row) == 4: 
+            label = f"[{row[0]}] {row[1]} - {row[2]}" 
+            record_dict[label] = row[3] 
+            options.append(label)
+        # Keep fallback just in case old sample data formats are used
+        elif len(row) == 3:
             label = f"[{idx+1}] {row[0]} - {row[1]}"
             record_dict[label] = row[2]
             options.append(label)
