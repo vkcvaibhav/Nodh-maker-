@@ -1565,30 +1565,24 @@ with tab3:
                 current_nondh_id = int(match.group(1))
         
         # 1. પહેલાં વર્ડ ફાઈલ બેકગ્રાઉન્ડમાં તૈયાર કરી લો
+# 1. પહેલાં વર્ડ ફાઈલ બેકગ્રાઉન્ડમાં તૈયાર કરી લો
         po_docx = create_purchase_order_docx(vendor_name, vendor_address, outward_no, formatted_date, po_df)
         
         st.markdown("---")
+        st.info("સૂચના: પહેલા 'સ્ટેપ ૧' બટન પર ક્લિક કરીને ફાઈલ ડાઉનલોડ કરો, ત્યારબાદ જ 'સ્ટેપ ૨' પર ક્લિક કરો.")
         
-        # --- નવું લોજીક: ડાઉનલોડ થાય પછી જ બીજું બટન દેખાશે ---
-        def mark_po_downloaded():
-            # જ્યારે ડાઉનલોડ બટન દબાવવામાં આવશે, ત્યારે આ સિસ્ટમ યાદ રાખી લેશે
-            st.session_state.po_is_downloaded = True
+        col_btn1, col_btn2 = st.columns(2)
+        
+        with col_btn1:
+            st.download_button(
+                label="૧. 📄 ખરીદી હુકમ ડાઉનલોડ કરો (Step 1: Download PO)", 
+                data=po_docx, 
+                file_name=f"PO_{vendor_name}.docx"
+            )
 
-        # સ્ટેપ ૧: માત્ર ડાઉનલોડ બટન દેખાશે
-        st.download_button(
-            label="૧. 📄 ખરીદી હુકમ ડાઉનલોડ કરો (Step 1: Download PO)", 
-            data=po_docx, 
-            file_name=f"PO_{vendor_name}.docx",
-            on_click=mark_po_downloaded
-        )
-
-        # સ્ટેપ ૨: ડાઉનલોડ સફળ થયા પછી જ આ નવું બટન પ્રગટ થશે
-        if st.session_state.get('po_is_downloaded', False):
-            st.success("✅ ફાઈલ સફળતાપૂર્વક ડાઉનલોડ થઈ ગઈ છે! હવે ઓર્ડરને Tab 4 માં મોકલો.")
-            
+        with col_btn2:
             if st.button("૨. ➡️ પેમેન્ટ માટે આગળ મોકલો (Step 2: Send to Tab 4)", type="primary"):
                 save_po_to_db(current_nondh_id, vendor_name, outward_no, formatted_date, grand_total)
-                st.session_state.po_is_downloaded = False  # ફરીથી છુપાવી દો
                 st.success("ઓર્ડર સફળતાપૂર્વક Tab 4 (Bill Payment) માં મોકલી દેવાયો છે!")
                 st.rerun()
 # --- TAB 4 (Bill Payment ONLY) ---
