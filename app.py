@@ -1564,20 +1564,27 @@ with tab3:
                 current_nondh_id = int(match.group(1))
         
         # 1. પહેલાં વર્ડ ફાઈલ બેકગ્રાઉન્ડમાં તૈયાર કરી લો
+        # 1. પહેલાં વર્ડ ફાઈલ બેકગ્રાઉન્ડમાં તૈયાર કરી લો
         po_docx = create_purchase_order_docx(vendor_name, vendor_address, outward_no, formatted_date, po_df)
         
-        # 2. ડેટાબેઝમાં સેવ કરવા માટેનું ફંક્શન (જે ડાઉનલોડ વખતે જાતે જ રન થશે)
-        def process_po_save(n_id, v_name, o_no, f_date, g_total):
-            save_po_to_db(n_id, v_name, o_no, f_date, g_total)
+        # 2. બન્ને કામને અલગ-અલગ બટનમાં વહેંચી દીધા છે (Two separate steps)
+        st.markdown("---")
+        col_btn1, col_btn2 = st.columns(2)
+        
+        with col_btn1:
+            # સ્ટેપ ૧: ફક્ત ફાઈલ ડાઉનલોડ થશે (કોઈ અડચણ વગર)
+            st.download_button(
+                label="૧. 📄 ખરીદી હુકમ ડાઉનલોડ કરો (Step 1: Download PO)", 
+                data=po_docx, 
+                file_name=f"PO_{vendor_name}.docx"
+            )
             
-        # 3. સીધું ડાઉનલોડ બટન (જે ક્લિક કરતા ડાઉનલોડ પણ કરશે અને DB પણ અપડેટ કરશે)
-        st.download_button(
-            label="📄 ખરીદી હુકમ ડાઉનલોડ કરો (Download PO & Send to Tab 4)", 
-            data=po_docx, 
-            file_name=f"PO_{vendor_name}.docx",
-            on_click=process_po_save,
-            args=(current_nondh_id, vendor_name, outward_no, formatted_date, grand_total)
-        )
+        with col_btn2:
+            # સ્ટેપ ૨: ફાઈલ ડાઉનલોડ કર્યા પછી આ બટન દબાવવાથી તે Tab 4 માં જશે
+            if st.button("૨. ➡️ પેમેન્ટ માટે આગળ મોકલો (Step 2: Send to Tab 4)", type="primary"):
+                save_po_to_db(current_nondh_id, vendor_name, outward_no, formatted_date, grand_total)
+                st.success("ઓર્ડર સફળતાપૂર્વક Tab 4 (Bill Payment) માં મોકલી દેવાયો છે!")
+                st.rerun()
 
 # --- TAB 4 (Bill Payment ONLY) ---
 with tab4:
