@@ -1624,6 +1624,7 @@ with tab4:
                                 
                                 st.session_state.ext_bill_no = str(data.get("bill_no", "INV-"))
                                 st.session_state.ext_amt = float(raw_amount)
+                                st.session_state.amt_t4 = float(raw_amount)
                                 st.session_state.ext_words = str(data.get("amount_words", ""))
                                 st.session_state.last_invoice = invoice_upload.name
                                 st.rerun() 
