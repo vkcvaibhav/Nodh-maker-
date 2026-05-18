@@ -1770,7 +1770,7 @@ with tab6:
     
     # Section A: Mark as Paid
     with st.expander("✅ બાકી પેમેન્ટ ક્લિયર કરો (Pending Payments to Mark as Paid)", expanded=True):
-        pending_pos = get_unfinished_pos()
+        pending_pos = get_unfinished_pos(('Unfinished', 'Payment_Generated'))
         if not pending_pos: st.info("કોઈ પેમેન્ટ બાકી નથી.")
         else:
             p_dict = {f"PO #{p[3]} - {p[2]} (₹{p[5]})": p for p in pending_pos}
