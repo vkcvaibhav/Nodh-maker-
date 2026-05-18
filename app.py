@@ -223,8 +223,10 @@ def get_vault_files_by_nondh(nondh_id):
 def get_vault_files(fy="All", doc_type="All", search_keyword=""):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    query = "SELECT nondh_id, file_name, file_path, upload_date, financial_year, month, doc_type, description FROM digital_vault WHERE 1=1"
+    # સુધારો: ડેટાબેઝમાંથી ડિલીટ કરવા માટે id (vault_id) ઉમેર્યો
+    query = "SELECT id, nondh_id, file_name, file_path, upload_date, financial_year, month, doc_type, description FROM digital_vault WHERE 1=1"
     params = []
+    
     if fy != "All":
         query += " AND financial_year=?"
         params.append(fy)
@@ -234,11 +236,38 @@ def get_vault_files(fy="All", doc_type="All", search_keyword=""):
     if search_keyword:
         query += " AND (file_name LIKE ? OR description LIKE ?)"
         params.extend([f"%{search_keyword}%", f"%{search_keyword}%"])
+        
     query += " ORDER BY upload_date DESC"
     c.execute(query, tuple(params))
     data = c.fetchall()
     conn.close()
     return data
+
+def delete_vault_record(vault_id, nondh_id, file_path):
+    """વોલ્ટમાંથી ફાઈલ કાઢે છે, અને જો Nondh જોડાયેલી હોય તો તેને પણ કાઢીને GitHub પર સિન્ક કરે છે."""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    
+    # ૧. વોલ્ટ ડેટાબેઝમાંથી ડિલીટ
+    c.execute("DELETE FROM digital_vault WHERE id = ?", (vault_id,))
+    
+    # ૨. જો Nondh ID હોય, તો આર્કાઇવ અને પેમેન્ટ ઓર્ડરમાંથી પણ આખી Nondh કાઢી નાખો
+    if nondh_id:
+        c.execute("DELETE FROM archive WHERE id = ?", (nondh_id,))
+        c.execute("DELETE FROM purchase_orders WHERE nondh_id = ?", (nondh_id,))
+        
+    conn.commit()
+    conn.close()
+    
+    # ૩. ડેટાબેઝ GitHub પર અપડેટ કરો (જેથી ત્યાંથી પણ ડિલીટ થઈ જાય)
+    push_db_to_github()
+    
+    # ૪. લોકલ ફોલ્ડરમાંથી PDF/Word ફાઈલ કાઢી નાખો
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except:
+            pass
 
 # Check if we already pulled the DB in this session to avoid constant downloading
 if "db_synced" not in st.session_state:
