@@ -1529,7 +1529,7 @@ with tab4:
     st.markdown("### 💳 બિલ પેમેન્ટ ફોર્મ (Bill Payment Form)")
     st.info("જે ખરીદીના હુકમ (Purchase Orders) માટે બિલ ચૂકવવાનું બાકી છે, તે જ અહીં દેખાશે.")
     
-    unfinished_pos = get_unfinished_pos()
+    unfinished_pos = get_unfinished_pos(('Unfinished',))
     
     if not unfinished_pos:
         st.success("હાલમાં કોઈ બિલ પેમેન્ટ બાકી નથી! (No unfinished purchase orders).")
