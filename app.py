@@ -1460,19 +1460,25 @@ with tab3:
     
     st.markdown("#### ૧. મંજૂર થયેલ નોંધ પસંદ કરો (Select Approved Nondh)")
     db_records = get_archives("All", "All")
+    
+    # --- NEW: Check the database for Nondh IDs that already have a PO ---
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT nondh_id FROM purchase_orders WHERE nondh_id IS NOT NULL")
+    used_nondh_ids = [row[0] for row in c.fetchall()]
+    conn.close()
+
     options = ["-- જાતે માહિતી ભરો (Manual Entry) --"]
     record_dict = {}
     for idx, row in enumerate(db_records):
-        # The database returns 4 items: id, date, subject, content
-        if len(row) == 4: 
-            label = f"[{row[0]}] {row[1]} - {row[2]}" 
-            record_dict[label] = row[3] 
-            options.append(label)
-        # Keep fallback just in case old sample data formats are used
-        elif len(row) == 3:
-            label = f"[{idx+1}] {row[0]} - {row[1]}"
-            record_dict[label] = row[2]
-            options.append(label)
+        if len(row) == 4:
+            nondh_id = row[0]
+            # ONLY add to dropdown if it hasn't been used yet!
+            if nondh_id not in used_nondh_ids:
+                label = f"[{nondh_id}] {row[1]} - {row[2]}" 
+                record_dict[label] = row[3] 
+                options.append(label)
+                
     selected_nondh = st.selectbox("અગાઉ સેવ કરેલ નોંધ પસંદ કરો:", options)
     
     st.markdown("#### ૨. સહી કરેલ ખરીદી હુકમ અપલોડ કરો (Upload Signed PO - Optional)")
