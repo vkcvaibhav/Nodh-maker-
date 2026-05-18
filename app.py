@@ -1156,21 +1156,37 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     run_loc = p_loc.add_run(f"સ્થળ : નવસારી\nતારીખ : {today_guj}")
     run_loc.font.size = Pt(12)
     
-    table_sig = doc.add_table(rows=1, cols=2)
-    table_sig.alignment = WD_TABLE_ALIGNMENT.LEFT
-    for cell in table_sig.rows[0].cells: cell.width = Inches(3.4)
+    # --- સુધારેલો ભાગ: ૨ કોલમને બદલે ૩ સહીના કોલમ (3 Signature Columns) ---
+    table_sig = doc.add_table(rows=1, cols=3)
+    table_sig.alignment = WD_TABLE_ALIGNMENT.CENTER
     
-    p_s1 = table_sig.cell(0,0).paragraphs[0]
+    # કુલ લિમિટ (6.8 Inches) ને ૩ સરખા ભાગમાં વહેંચી દીધી (આશરે 2.26 ઇંચ દરેક)
+    col_widths = [Inches(2.26), Inches(2.26), Inches(2.26)]
+    for i, cell in enumerate(table_sig.rows[0].cells): 
+        cell.width = col_widths[i]
+    
+    # કોલમ ૧: ખેતીવાડી અધિકારી (Left Alignment)
+    p_s1 = table_sig.cell(0, 0).paragraphs[0]
     p_s1.paragraph_format.space_before, p_s1.paragraph_format.space_after = Pt(0), Pt(0)
-    run_s1 = p_s1.add_run("પ્રોજેક્ટ ઇનચાર્જની સહી અને હોદ્દો")
-    run_s1.bold, run_s1.font.size = True, Pt(12)
+    p_s1.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    run_s1 = p_s1.add_run("ખેતીવાડી અધિકારીની\nસહી અને હોદ્દો")
+    run_s1.bold, run_s1.font.size = True, Pt(11)
     
-    p_s2 = table_sig.cell(0,1).paragraphs[0]
+    # કોલમ ૨: સિનિયર અકેરોલોજીસ્ટ (Center Alignment)
+    p_s2 = table_sig.cell(0, 1).paragraphs[0]
     p_s2.paragraph_format.space_before, p_s2.paragraph_format.space_after = Pt(0), Pt(0)
-    run_s2 = p_s2.add_run("વિભાગીય વડાની સહી અને હોદ્દો")
-    run_s2.bold, run_s2.font.size = True, Pt(12)
-    p_s2.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_s2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_s2 = p_s2.add_run("સિનિયર અકેરોલોજીસ્ટની\nસહી અને હોદ્દો")
+    run_s2.bold, run_s2.font.size = True, Pt(11)
     
+    # કોલમ ૩: વિભાગીય વડા (Right Alignment)
+    p_s3 = table_sig.cell(0, 2).paragraphs[0]
+    p_s3.paragraph_format.space_before, p_s3.paragraph_format.space_after = Pt(0), Pt(0)
+    p_s3.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    run_s3 = p_s3.add_run("વિભાગીય વડાની\nસહી અને હોદ્દો")
+    run_s3.bold, run_s3.font.size = True, Pt(11)
+    
+    # --- નીચેનો બાકીનો કોડ જેમ છે તેમ જ રહેશે ---
     p_passed = doc.add_paragraph()
     p_passed.paragraph_format.space_before, p_passed.paragraph_format.space_after = Pt(20), Pt(6)
     run_passed = p_passed.add_run("Passed for Payment Rs ........................................\nRupees: ........................................................................................")
