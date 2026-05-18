@@ -1072,11 +1072,17 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
         p_text.paragraph_format.left_indent = Inches(0)
         p_text.paragraph_format.space_before = Pt(0)
         p_text.paragraph_format.space_after = Pt(2) 
-        p_text.paragraph_format.line_spacing = 1.0  
-        
-        run_text = p_text.add_run(text)
-        run_text.font.size = Pt(9)
+        p_text.paragraph_format.line_spacing = 1.0
         p_text.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+# --- NEW: ** વચ્ચેના લખાણને Bold કરવા માટેનું સ્માર્ટ લોજીક ---
+        parts = text.split("**")
+        for i, part in enumerate(parts):
+            if part:
+                run_text = p_text.add_run(part)
+                run_text.font.size = Pt(9)
+                # એકી સંખ્યા વાળા ભાગ (અર્થાત ** ની વચ્ચે વાળા) Bold થશે
+                if i % 2 != 0:  
+                    run_text.bold = True
 
     # --- Convert inputs to Gujarati digits ---
     guj_amount = eng_to_guj(f"{amount:.2f}")
