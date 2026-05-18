@@ -1401,20 +1401,60 @@ with tab2:
 
     def smart_search_gemini(query, records):
         if not query.strip(): return records
+        
+        # Using a fast model for search
         model = genai.GenerativeModel('gemini-3.1-pro-preview')
+        
         records_context = ""
         for i, record in enumerate(records):
-            if len(record) == 3: date, subject, content = record
-            elif len(record) == 2: subject, content = record
-            else: continue 
-            records_context += f"ID: {i} | Subject: {subject} | Content: {content[:150]}...\n"
-        prompt = f"Find matching IDs for: '{query}'. Records: {records_context}. Return ONLY comma-separated IDs (e.g. 0,3). If none, return NONE."
+            # FIXED: Handle 4-item database records properly
+            if len(record) == 4:
+                _, _, subject, content = record
+            elif len(record) == 3: 
+                date, subject, content = record
+            elif len(record) == 2: 
+                subject, content = record
+            else: 
+                continue 
+            
+            # INCREASED CONTEXT: Send up to 800 characters so AI can read the actual items
+            clean_content = content[:800].replace('\n', ' ')
+            records_context += f"ID: {i} | Subject: {subject} | Content: {clean_content}...\n"
+            
+        # ADVANCED PROMPT: Instruct the AI to act as a cross-lingual search engine
+        prompt = f"""
+        You are an intelligent bilingual search engine (English <-> Gujarati).
+        The user is searching for: "{query}"
+        
+        Your Task: Find all record IDs that semantically match the user's query.
+        - If the query is in English (e.g., "chemicals", "pins", "equipment"), translate the intent and find the matching Gujarati records.
+        - If the query is in Gujarati, find the exact or contextually matching records.
+        - Match based on meaning and translated keywords, not just exact text matches.
+        
+        Records Data:
+        {records_context}
+        
+        Return ONLY a comma-separated list of matching IDs (e.g., 0,2,5). 
+        If absolutely no records match the meaning, return the exact word: NONE
+        """
+        
         try:
-            result = model.generate_content(prompt).text.strip()
-            if result == "NONE" or not result: return []
-            matched_ids = [int(x.strip()) for x in result.split(",") if x.strip().isdigit()]
+            response = model.generate_content(prompt)
+            result = response.text.strip()
+            
+            if "NONE" in result.upper() or not result: 
+                return []
+                
+            # Safely extract only numbers using regex (prevents crashes if AI adds extra words)
+            import re
+            matched_ids_str = re.findall(r'\d+', result)
+            matched_ids = [int(x) for x in matched_ids_str]
+            
+            # Return only valid records
             return [records[i] for i in matched_ids if i < len(records)]
-        except: return records
+            
+        except Exception as e:
+            return records
 
     display_records = smart_search_gemini(search_query, all_records) if search_query else all_records
     if display_records:
