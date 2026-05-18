@@ -1552,6 +1552,7 @@ with tab3:
     po_df = st.data_editor(default_df, num_rows="dynamic", use_container_width=True, key="po_editor")
     
    # ડાઉનલોડ બટન અને ડેટાબેઝ સેવ કરવાનું નવું લોજીક
+    # ડાઉનલોડ બટન અને ડેટાબેઝ સેવ કરવાનું નવું લોજીક
     if vendor_name and not po_df.empty:
         formatted_date = po_date.strftime("%d.%m.%Y")
         grand_total = pd.to_numeric(po_df['Total Price'], errors='coerce').fillna(0).sum()
@@ -1564,28 +1565,32 @@ with tab3:
                 current_nondh_id = int(match.group(1))
         
         # 1. પહેલાં વર્ડ ફાઈલ બેકગ્રાઉન્ડમાં તૈયાર કરી લો
-        # 1. પહેલાં વર્ડ ફાઈલ બેકગ્રાઉન્ડમાં તૈયાર કરી લો
         po_docx = create_purchase_order_docx(vendor_name, vendor_address, outward_no, formatted_date, po_df)
         
-        # 2. બન્ને કામને અલગ-અલગ બટનમાં વહેંચી દીધા છે (Two separate steps)
         st.markdown("---")
-        col_btn1, col_btn2 = st.columns(2)
         
-        with col_btn1:
-            # સ્ટેપ ૧: ફક્ત ફાઈલ ડાઉનલોડ થશે (કોઈ અડચણ વગર)
-            st.download_button(
-                label="૧. 📄 ખરીદી હુકમ ડાઉનલોડ કરો (Step 1: Download PO)", 
-                data=po_docx, 
-                file_name=f"PO_{vendor_name}.docx"
-            )
+        # --- નવું લોજીક: ડાઉનલોડ થાય પછી જ બીજું બટન દેખાશે ---
+        def mark_po_downloaded():
+            # જ્યારે ડાઉનલોડ બટન દબાવવામાં આવશે, ત્યારે આ સિસ્ટમ યાદ રાખી લેશે
+            st.session_state.po_is_downloaded = True
+
+        # સ્ટેપ ૧: માત્ર ડાઉનલોડ બટન દેખાશે
+        st.download_button(
+            label="૧. 📄 ખરીદી હુકમ ડાઉનલોડ કરો (Step 1: Download PO)", 
+            data=po_docx, 
+            file_name=f"PO_{vendor_name}.docx",
+            on_click=mark_po_downloaded
+        )
+
+        # સ્ટેપ ૨: ડાઉનલોડ સફળ થયા પછી જ આ નવું બટન પ્રગટ થશે
+        if st.session_state.get('po_is_downloaded', False):
+            st.success("✅ ફાઈલ સફળતાપૂર્વક ડાઉનલોડ થઈ ગઈ છે! હવે ઓર્ડરને Tab 4 માં મોકલો.")
             
-        with col_btn2:
-            # સ્ટેપ ૨: ફાઈલ ડાઉનલોડ કર્યા પછી આ બટન દબાવવાથી તે Tab 4 માં જશે
             if st.button("૨. ➡️ પેમેન્ટ માટે આગળ મોકલો (Step 2: Send to Tab 4)", type="primary"):
                 save_po_to_db(current_nondh_id, vendor_name, outward_no, formatted_date, grand_total)
+                st.session_state.po_is_downloaded = False  # ફરીથી છુપાવી દો
                 st.success("ઓર્ડર સફળતાપૂર્વક Tab 4 (Bill Payment) માં મોકલી દેવાયો છે!")
                 st.rerun()
-
 # --- TAB 4 (Bill Payment ONLY) ---
 with tab4:
     st.markdown("### 💳 બિલ પેમેન્ટ ફોર્મ (Bill Payment Form)")
