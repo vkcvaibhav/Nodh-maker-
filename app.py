@@ -1726,7 +1726,7 @@ with tab5:
             st.markdown("#### 📝 મંજુરીની વિગતો (Approval Details - મુદ્દા નં. ૧)")
             col_a1, col_a2, col_a3 = st.columns(3)
             with col_a1:
-                item_no_pst = st.text_input("આઇટમ નં. (Item No.)", value="", placeholder="દા.ત. 14")
+                item_no_pst = st.text_input("સ્ટેચ્યુટ નં. ૧૨૧ ની આઇટમ નં", value="", placeholder="દા.ત. 14")
             with col_a2:
                 approval_no_pst = st.text_input("મંજુરી નં. (Approval No.)", value="", placeholder="દા.ત. ACN/123/2026")
             with col_a3:
