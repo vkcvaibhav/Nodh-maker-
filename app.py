@@ -1696,15 +1696,18 @@ with tab5:
                 grant_year = st.text_input("ફાળવેલ ગ્રાન્ટ વર્ષ (Grant Year)", value="", placeholder="હાથેથી લખવા માટે ખાલી છોડી દો")
                 party_name_pst = st.text_input("પાર્ટીનું નામ (Party Name)", value=v_name_t5, key="party_t5")
             with col_p2:
-                # --- નવો સુધારો ૧: Tab 4 ની 'ચૂકવવા પાત્ર રકમ' ને અહી સીધી ખેંચી લેવા માટે (Sync) ---
-                synced_amount = float(amt_t5)
-                # જો Tab 4 માં આ જ ઓર્ડર ખૂલ્યો હોય અને રકમ સેટ કરી હોય, તો તે જ રકમ અહી લેશે
+                # --- નવો સુધારો: Streamlit ની મેમરીને સીધી અપડેટ કરવા માટેનું લોજીક ---
+                # જો Tab 4 માં આ જ ઓર્ડર ખૂલ્યો હોય અને ત્યાં રકમ સેટ હોય, તો Tab 5 ની મેમરી ફરજિયાત ઓવરરાઈટ કરો
                 if st.session_state.get("current_po_id_t4") == po_id_t5 and "amt_t4" in st.session_state:
-                    synced_amount = float(st.session_state.amt_t4)
+                    st.session_state['amt_t5'] = float(st.session_state.amt_t4)
+                elif "amt_t5" not in st.session_state:
+                    # જો એપ પહેલી વાર રિફ્રેશ થઈ હોય
+                    st.session_state['amt_t5'] = float(amt_t5)
                 
-                final_amt_pst = st.number_input("બીલની કુલ રકમ (Amount)", value=synced_amount, key="amt_t5")
+                # નોંધ: અહીથી `value=...` કાઢી નાખ્યું છે, કારણ કે તે સીધું `key="amt_t5"` ની મેમરીમાંથી જ લેટેસ્ટ રકમ ખેંચી લેશે
+                final_amt_pst = st.number_input("બીલની કુલ રકમ (Amount)", key="amt_t5")
                 
-                # --- નવો સુધારો ૨: બટન વગર આપોઆપ ગુજરાતી અનુવાદ (Auto-Translate) ---
+                # --- બટન વગર આપોઆપ ગુજરાતી અનુવાદ (Auto-Translate) ---
                 @st.cache_data(show_spinner=False)
                 def get_gujarati_words_auto(amount, key):
                     if not key or amount == 0: return ""
