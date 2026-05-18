@@ -1590,13 +1590,17 @@ with tab4:
                                 import json
                                 genai.configure(api_key=api_key)
                                 model = genai.GenerativeModel('gemini-3.1-pro-preview') 
-                                prompt = """
-                                Extract the following from this invoice:
-                                1. Invoice/Bill Number
-                                2. Grand Total Amount (as a pure number)
-                                3. Grand Total Amount in English words (e.g. "Four Thousand Two Hundred Forty Eight")
+                                # --- NEW: Smart AI Prompt with PO Amount Context ---
+                                prompt = f"""
+                                You are an intelligent accounting AI. The approved Purchase Order (PO) amount for this transaction is ₹{amt}.
+                                Carefully analyze the uploaded invoice and extract the following:
+                                
+                                1. Invoice/Bill Number.
+                                2. Final Payable Amount: Look for terms like 'Grand Total', 'Invoice Total', 'Net Payable', or 'Total Amount'. Use your intelligence to understand the invoice structure and identify the final amount including taxes. Logically compare it with the PO amount (₹{amt}) to ensure you pick the correct total. Return it as a pure number.
+                                3. Final Payable Amount in English words (e.g. "Four Thousand Two Hundred Forty Eight").
+                                
                                 Return ONLY a valid JSON object in this exact format:
-                                {"bill_no": "INV-123", "amount": 1234.50, "amount_words": "One Thousand..."}
+                                {{"bill_no": "INV-123", "amount": 1234.50, "amount_words": "One Thousand Two Hundred..."}}
                                 """
                                 if invoice_upload.type == "application/pdf":
                                     reader = PyPDF2.PdfReader(invoice_upload)
