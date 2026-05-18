@@ -1681,15 +1681,20 @@ with tab5:
                 grant_year = st.text_input("ફાળવેલ ગ્રાન્ટ વર્ષ (Grant Year)", value="", placeholder="હાથેથી લખવા માટે ખાલી છોડી દો")
                 party_name_pst = st.text_input("પાર્ટીનું નામ (Party Name)", value=v_name_t5, key="party_t5")
             with col_p2:
-                final_amt_pst = st.number_input("બીલની કુલ રકમ (Amount)", value=float(amt_t5), key="amt_t5")
+                # --- નવો સુધારો ૧: Tab 4 ની 'ચૂકવવા પાત્ર રકમ' ને અહી સીધી ખેંચી લેવા માટે (Sync) ---
+                synced_amount = float(amt_t5)
+                # જો Tab 4 માં આ જ ઓર્ડર ખૂલ્યો હોય અને રકમ સેટ કરી હોય, તો તે જ રકમ અહી લેશે
+                if st.session_state.get("current_po_id_t4") == po_id_t5 and "amt_t4" in st.session_state:
+                    synced_amount = float(st.session_state.amt_t4)
                 
-                # --- NEW: બટન વગર આપોઆપ અનુવાદ (Auto-Translate with Cache) ---
+                final_amt_pst = st.number_input("બીલની કુલ રકમ (Amount)", value=synced_amount, key="amt_t5")
+                
+                # --- નવો સુધારો ૨: બટન વગર આપોઆપ ગુજરાતી અનુવાદ (Auto-Translate) ---
                 @st.cache_data(show_spinner=False)
                 def get_gujarati_words_auto(amount, key):
                     if not key or amount == 0: return ""
                     try:
                         genai.configure(api_key=key)
-                        # ઝડપી પરિણામ માટે flash-lite મોડેલનો ઉપયોગ
                         model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
                         prompt = f"Translate the number {amount} into Gujarati words. Return ONLY the Gujarati translation. Example: for 3956 return 'ત્રણ હજાર નવસો છપ્પન'."
                         res = model.generate_content(prompt)
@@ -1697,9 +1702,7 @@ with tab5:
                     except:
                         return ""
                 
-                # બેકગ્રાઉન્ડમાં ફંક્શન જાતે જ રકમ લેશે અને શબ્દો આપશે
                 auto_gujarati_text = get_gujarati_words_auto(final_amt_pst, api_key)
-                
                 amt_words_guj = st.text_input("રકમ શબ્દોમાં (ગુજરાતીમાં)", value=auto_gujarati_text, placeholder="દા.ત., ત્રણ હજાર નવસો છપ્પન")
                             
             st.markdown("#### 📝 મંજુરીની વિગતો (Approval Details - મુદ્દા નં. ૧)")
