@@ -1040,7 +1040,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     add_p2_header_row(top_table.cell(2,1), ":-")
     add_p2_header_row(top_table.cell(2,2), f"{float(amount):.2f}") 
     
-    add_p2_header_row(top_table.cell(3,0), "ચુકવણું કરવામાં આવનાર પાર્ટીનું નામ\n(અંગ્રેજી કેપીટલ લેટર)")
+    add_p2_header_row(top_table.cell(3,0), "ચુકવણું કરવામાં આવનાર પાર્ટીનું નામ (અંગ્રેજી કેપીટલ લેટર)")
     add_p2_header_row(top_table.cell(3,1), ":-")
     add_p2_header_row(top_table.cell(3,2), f"{party_name}")
     
