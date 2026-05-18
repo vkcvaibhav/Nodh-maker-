@@ -1769,7 +1769,7 @@ with tab6:
     st.markdown("### 🗄️ ડિજિટલ વોલ્ટ અને પેમેન્ટ ક્લોઝર (Vault & Payment Closure)")
     
     # Section A: Mark as Paid
-    with st.expander("✅ બાકી પેમેન્ટ ક્લિયર કરો (Pending Payments to Mark as Paid)", expanded=True):
+    with st.expander("✅ બાકી પેમેન્ટ ક્લિયર કરો (Pending Payments to Mark as Paid)", expanded=False):
         pending_pos = get_unfinished_pos(('Unfinished', 'Payment_Generated'))
         if not pending_pos: st.info("કોઈ પેમેન્ટ બાકી નથી.")
         else:
@@ -1792,39 +1792,97 @@ with tab6:
                         st.error("ઓર્ડર કાયમ માટે રદ કરવામાં આવ્યો છે!")
                         st.rerun()
 
-    # Section B: General Vault Search
+    # --- NEW SECTION: Upload Physical Signed Documents ---
     st.markdown("---")
-    st.markdown("#### 🔍 તમામ વોલ્ટ ડોક્યુમેન્ટ શોધો (Search All Vault Docs)")
+    st.markdown("#### 📤 દસ્તાવેજ અપલોડ કરો (Upload Signed Documents to Vault)")
+    st.info("સહી કરેલ નોંધ, મંજૂરી, PO, બિલ પેમેન્ટ અને પેસ્ટિંગ ફોર્મ અહીં કાયમી સાચવવા માટે અપલોડ કરો.")
+    
+    # Get list of Nondhs to attach files to
+    all_nondhs_for_vault = get_archives("All", "All")
+    nondh_opts = ["-- Select Nondh --"] + [f"[{n[0]}] {n[1]} - {n[2]}" for n in all_nondhs_for_vault if len(n) == 4]
+    
+    col_u1, col_u2, col_u3 = st.columns(3)
+    with col_u1:
+        sel_nondh_vault = st.selectbox("કઈ નોંધ સાથે જોડવું છે? (Select Nondh ID)", nondh_opts)
+    with col_u2:
+        sel_doc_type = st.selectbox("દસ્તાવેજનો પ્રકાર (Document Type)", [
+            "Signed Nondh", "Approval Letter", "Signed PO", 
+            "Party Invoice", "Signed Bill Payment", "Signed Bill Pasting", "Other"
+        ])
+    with col_u3:
+        up_file = st.file_uploader("ફાઈલ પસંદ કરો (PDF/Image)", type=['pdf', 'jpg', 'jpeg', 'png'])
+        
+    if st.button("💾 વોલ્ટમાં સેવ કરો (Save to Permanent Vault)"):
+        if sel_nondh_vault == "-- Select Nondh --":
+            st.error("કૃપા કરીને નોંધ પસંદ કરો!")
+        elif not up_file:
+            st.error("કૃપા કરીને ફાઈલ અપલોડ કરો!")
+        else:
+            import re
+            match = re.search(r'\[(\d+)\]', sel_nondh_vault)
+            if match:
+                n_id_val = int(match.group(1))
+                file_bytes = up_file.getbuffer()
+                save_file_to_vault(file_bytes, up_file.name, sel_doc_type, nondh_id=n_id_val, description="Manually Uploaded to Vault")
+                st.success(f"{sel_doc_type} વોલ્ટમાં Nondh #{n_id_val} હેઠળ કાયમ માટે સેવ થઈ ગયું!")
+                st.rerun()
+
+    # --- UPDATED SECTION: Grouped Vault Display ---
+    st.markdown("---")
+    st.markdown("#### 🔍 નોંધ મુજબ વોલ્ટ (Vault Grouped by Nondh ID)")
     
     current_year = datetime.date.today().year
     fy_options = ["All"] + [f"{y}-{str(y+1)[2:]}" for y in range(current_year-2, current_year+3)][::-1]
     
     col_f1, col_f2, col_f3 = st.columns(3)
     with col_f1: filter_fy = st.selectbox("નાણાકીય વર્ષ (Financial Year)", fy_options)
-    with col_f2: filter_type = st.selectbox("પ્રકાર (Type)", ["All", "Sadar Nondh Draft", "Signed Nondh", "PO Draft", "Signed PO", "Vendor Invoice", "Bill Payment Draft", "Signed Bill Payment", "Bill Pasting Draft", "Signed Bill Pasting", "Other"])
+    with col_f2: filter_type = st.selectbox("પ્રકાર (Type)", ["All", "Signed Nondh", "Approval Letter", "Signed PO", "Party Invoice", "Signed Bill Payment", "Signed Bill Pasting", "Sadar Nondh Draft", "PO Draft", "Other"])
     with col_f3: search_kw = st.text_input("શબ્દથી શોધો (Search by Name/Tag)")
 
     vault_records = get_vault_files(filter_fy, filter_type, search_kw)
-    if not vault_records: st.info("કોઈ ડોક્યુમેન્ટ મળ્યા નથી.")
+    
+    if not vault_records: 
+        st.info("કોઈ ડોક્યુમેન્ટ મળ્યા નથી.")
     else:
         st.success(f"કુલ {len(vault_records)} ડોક્યુમેન્ટ્સ મળ્યા.")
-        for idx, record in enumerate(vault_records):
-            # નવું અનપેકિંગ (v_id ઉમેર્યો છે)
+        
+        # 1. Group records by Nondh ID
+        grouped_vault = {}
+        for record in vault_records:
             v_id, n_id, f_name, f_path, u_date, fy, month, d_type, desc = record
+            group_key = n_id if n_id else "Unlinked / General Documents"
+            if group_key not in grouped_vault:
+                grouped_vault[group_key] = []
+            grouped_vault[group_key].append(record)
             
-            with st.container(border=True):
-                # 3 કોલમ બનાવ્યા: માહિતી માટે, ડાઉનલોડ માટે અને ડિલીટ માટે
-                col_info, col_btn1, col_btn2 = st.columns([6, 2, 2])
-                with col_info:
-                    st.markdown(f"**{f_name}**")
-                    st.caption(f"🗓️ {u_date} | 📁 {fy} ({month}) | 🏷️ {d_type} | 🔗 Nondh ID: {n_id if n_id else 'None'}")
-                with col_btn1:
-                    if os.path.exists(f_path):
-                        with open(f_path, "rb") as f:
-                            st.download_button("⬇️ Download", data=f.read(), file_name=f_name, key=f"dl_vault_main_{v_id}")
-                with col_btn2:
-                    # --- નવું: Delete બટન ---
-                    if st.button("🗑️ Delete", key=f"del_vault_{v_id}"):
-                        delete_vault_record(v_id, n_id, f_path)
-                        st.error(f"'{f_name}' અને તેની નોંધ કાયમ માટે રદ કરવામાં આવી છે!")
-                        st.rerun()
+        # 2. Display them neatly under their Nondh ID headers
+        for n_id_key, records in grouped_vault.items():
+            st.markdown(f"##### 📁 Nondh ID: {n_id_key}")
+            
+            for record in records:
+                v_id, n_id, f_name, f_path, u_date, fy, month, d_type, desc = record
+                with st.container(border=True):
+                    col_info, col_btn1, col_btn2 = st.columns([6, 2, 2])
+                    with col_info:
+                        st.markdown(f"**{d_type}**: {f_name}")
+                        st.caption(f"🗓️ {u_date} | 📁 {fy} ({month})")
+                    with col_btn1:
+                        if os.path.exists(f_path):
+                            with open(f_path, "rb") as f:
+                                st.download_button("⬇️ Download", data=f.read(), file_name=f_name, key=f"dl_vault_main_{v_id}")
+                        else:
+                            st.error("File missing")
+                    with col_btn2:
+                        if st.button("🗑️ Delete", key=f"del_vault_{v_id}"):
+                            # Note: Deleting a single vault record no longer deletes the whole Nondh!
+                            conn = sqlite3.connect(DB_FILE)
+                            c = conn.cursor()
+                            c.execute("DELETE FROM digital_vault WHERE id = ?", (v_id,))
+                            conn.commit()
+                            conn.close()
+                            push_db_to_github()
+                            if os.path.exists(f_path):
+                                try: os.remove(f_path)
+                                except: pass
+                            st.error(f"ફાઈલ '{f_name}' રદ કરવામાં આવી છે!")
+                            st.rerun()
