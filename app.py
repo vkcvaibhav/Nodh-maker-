@@ -1761,7 +1761,7 @@ with tab6:
             sel_pay = st.selectbox("પેમેન્ટ થયેલ ઓર્ડર પસંદ કરો:", list(p_dict.keys()))
             if sel_pay:
                 po_data = p_dict[sel_pay]
-                col_pay1, col_pay2 = st.columns(2)
+                col_pay1, col_pay2, col_pay3 = st.columns(3)
                 with col_pay1: pay_info = st.text_input("પેમેન્ટની વિગત (UTR / Cheque No. / Date) - Optional")
                 with col_pay2:
                     st.write("")
