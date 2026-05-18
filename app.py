@@ -1551,28 +1551,33 @@ with tab3:
     
     po_df = st.data_editor(default_df, num_rows="dynamic", use_container_width=True, key="po_editor")
     
-    if st.button("📄 ખરીદી હુકમ ડાઉનલોડ કરો (Download PO & Send to Bill Payment Queue)"):
-        if vendor_name and not po_df.empty:
-            formatted_date = po_date.strftime("%d.%m.%Y")
-            grand_total = pd.to_numeric(po_df['Total Price'], errors='coerce').fillna(0).sum()
+   # ડાઉનલોડ બટન અને ડેટાબેઝ સેવ કરવાનું નવું લોજીક
+    if vendor_name and not po_df.empty:
+        formatted_date = po_date.strftime("%d.%m.%Y")
+        grand_total = pd.to_numeric(po_df['Total Price'], errors='coerce').fillna(0).sum()
+        
+        current_nondh_id = None
+        if selected_nondh != "-- જાતે માહિતી ભરો (Manual Entry) --":
+            import re
+            match = re.search(r'\[(\d+)\]', selected_nondh)
+            if match:
+                current_nondh_id = int(match.group(1))
+        
+        # 1. પહેલાં વર્ડ ફાઈલ બેકગ્રાઉન્ડમાં તૈયાર કરી લો
+        po_docx = create_purchase_order_docx(vendor_name, vendor_address, outward_no, formatted_date, po_df)
+        
+        # 2. ડેટાબેઝમાં સેવ કરવા માટેનું ફંક્શન (જે ડાઉનલોડ વખતે જાતે જ રન થશે)
+        def process_po_save(n_id, v_name, o_no, f_date, g_total):
+            save_po_to_db(n_id, v_name, o_no, f_date, g_total)
             
-            # --- NEW: Extract the Nondh ID from the selected dropdown label ---
-            current_nondh_id = None
-            if selected_nondh != "-- જાતે માહિતી ભરો (Manual Entry) --":
-                import re
-                # Pulls the number from inside the brackets, e.g., "[12] Date - Subj" -> 12
-                match = re.search(r'\[(\d+)\]', selected_nondh)
-                if match:
-                    current_nondh_id = int(match.group(1))
-            
-            po_docx = create_purchase_order_docx(vendor_name, vendor_address, outward_no, formatted_date, po_df)
-            
-            # --- FIXED: Added current_nondh_id so the DB remembers this Nondh is "used" ---
-            save_po_to_db(current_nondh_id, vendor_name, outward_no, formatted_date, grand_total)
-            
-            st.download_button("Download Purchase Order (DOCX)", data=po_docx, file_name=f"PO_{vendor_name}.docx")
-            st.success("ખરીદી હુકમ તૈયાર છે અને પેમેન્ટ માટે Tab 4 માં મોકલી દેવામાં આવ્યો છે!")
-            st.rerun() # Refreshes the page instantly so the dropdown updates
+        # 3. સીધું ડાઉનલોડ બટન (જે ક્લિક કરતા ડાઉનલોડ પણ કરશે અને DB પણ અપડેટ કરશે)
+        st.download_button(
+            label="📄 ખરીદી હુકમ ડાઉનલોડ કરો (Download PO & Send to Tab 4)", 
+            data=po_docx, 
+            file_name=f"PO_{vendor_name}.docx",
+            on_click=process_po_save,
+            args=(current_nondh_id, vendor_name, outward_no, formatted_date, grand_total)
+        )
 
 # --- TAB 4 (Bill Payment ONLY) ---
 with tab4:
