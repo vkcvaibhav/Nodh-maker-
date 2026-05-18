@@ -1805,19 +1805,35 @@ with tab6:
     # --- NEW SECTION: Upload Physical Signed Documents ---
     st.markdown("---")
     st.markdown("#### 📤 દસ્તાવેજ અપલોડ કરો (Upload Signed Documents to Vault)")
-    st.info("સહી કરેલ નોંધ, મંજૂરી, PO, બિલ પેમેન્ટ અને પેસ્ટિંગ ફોર્મ અહીં કાયમી સાચવવા માટે અપલોડ કરો.")
+    st.info("સહી કરેલ PO, બિલ પેમેન્ટ અને પેસ્ટિંગ ફોર્મ અહીં કાયમી સાચવવા માટે અપલોડ કરો.")
     
-    # Get list of Nondhs to attach files to
+    # 1. Get all Nondhs and map their subjects
     all_nondhs_for_vault = get_archives("All", "All")
-    nondh_opts = ["-- Select Nondh --"] + [f"[{n[0]}] {n[1]} - {n[2]}" for n in all_nondhs_for_vault if len(n) == 4]
+    nondh_subject_map = {}
+    
+    # 2. Find which Nondhs are "Closed" (they already have a Signed Bill Pasting)
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT nondh_id FROM digital_vault WHERE doc_type = 'Signed Bill Pasting' AND nondh_id IS NOT NULL")
+    closed_nondh_ids = [row[0] for row in c.fetchall()]
+    conn.close()
+    
+    # 3. Create the filtered dropdown options (excluding closed Nondhs)
+    nondh_opts = ["-- Select Nondh --"]
+    for n in all_nondhs_for_vault:
+        if len(n) == 4:
+            n_id, n_subj = n[0], n[2]
+            nondh_subject_map[n_id] = n_subj  # Save for the expander titles later
+            if n_id not in closed_nondh_ids:
+                nondh_opts.append(f"[{n_id}] {n_subj}") # Display ID and Subject
     
     col_u1, col_u2, col_u3 = st.columns(3)
     with col_u1:
         sel_nondh_vault = st.selectbox("કઈ નોંધ સાથે જોડવું છે? (Select Nondh ID)", nondh_opts)
     with col_u2:
+        # Restricted Document Types
         sel_doc_type = st.selectbox("દસ્તાવેજનો પ્રકાર (Document Type)", [
-            "Signed Nondh", "Approval Letter", "Signed PO", 
-            "Party Invoice", "Signed Bill Payment", "Signed Bill Pasting", "Other"
+            "Signed PO", "Signed Bill Payment", "Signed Bill Pasting"
         ])
     with col_u3:
         up_file = st.file_uploader("ફાઈલ પસંદ કરો (PDF/Image)", type=['pdf', 'jpg', 'jpeg', 'png'])
@@ -1837,7 +1853,7 @@ with tab6:
                 st.success(f"{sel_doc_type} વોલ્ટમાં Nondh #{n_id_val} હેઠળ કાયમ માટે સેવ થઈ ગયું!")
                 st.rerun()
 
-    # --- UPDATED SECTION: Grouped Vault Display ---
+    # --- UPDATED SECTION: Grouped Vault Display with Expanders ---
     st.markdown("---")
     st.markdown("#### 🔍 નોંધ મુજબ વોલ્ટ (Vault Grouped by Nondh ID)")
     
@@ -1860,39 +1876,46 @@ with tab6:
         grouped_vault = {}
         for record in vault_records:
             v_id, n_id, f_name, f_path, u_date, fy, month, d_type, desc = record
-            group_key = n_id if n_id else "Unlinked / General Documents"
+            group_key = n_id if n_id else "Unlinked"
             if group_key not in grouped_vault:
                 grouped_vault[group_key] = []
             grouped_vault[group_key].append(record)
             
-        # 2. Display them neatly under their Nondh ID headers
+        # 2. Display them neatly under clickable Expanders
         for n_id_key, records in grouped_vault.items():
-            st.markdown(f"##### 📁 Nondh ID: {n_id_key}")
             
-            for record in records:
-                v_id, n_id, f_name, f_path, u_date, fy, month, d_type, desc = record
-                with st.container(border=True):
-                    col_info, col_btn1, col_btn2 = st.columns([6, 2, 2])
-                    with col_info:
-                        st.markdown(f"**{d_type}**: {f_name}")
-                        st.caption(f"🗓️ {u_date} | 📁 {fy} ({month})")
-                    with col_btn1:
-                        if os.path.exists(f_path):
-                            with open(f_path, "rb") as f:
-                                st.download_button("⬇️ Download", data=f.read(), file_name=f_name, key=f"dl_vault_main_{v_id}")
-                        else:
-                            st.error("File missing")
-                    with col_btn2:
-                        if st.button("🗑️ Delete", key=f"del_vault_{v_id}"):
-                            # Note: Deleting a single vault record no longer deletes the whole Nondh!
-                            conn = sqlite3.connect(DB_FILE)
-                            c = conn.cursor()
-                            c.execute("DELETE FROM digital_vault WHERE id = ?", (v_id,))
-                            conn.commit()
-                            conn.close()
-                            push_db_to_github()
+            # Determine the title of the expander
+            if n_id_key == "Unlinked":
+                expander_title = "📁 Unlinked / General Documents"
+            else:
+                subj = nondh_subject_map.get(n_id_key, "Unknown Subject")
+                expander_title = f"📁 Nondh ID: {n_id_key} - {subj}"
+            
+            # Create a clickable dropdown panel (expander)
+            with st.expander(expander_title, expanded=False):
+                for record in records:
+                    v_id, n_id, f_name, f_path, u_date, fy, month, d_type, desc = record
+                    with st.container(border=True):
+                        col_info, col_btn1, col_btn2 = st.columns([6, 2, 2])
+                        with col_info:
+                            st.markdown(f"**{d_type}**: {f_name}")
+                            st.caption(f"🗓️ {u_date} | 📁 {fy} ({month})")
+                        with col_btn1:
                             if os.path.exists(f_path):
-                                try: os.remove(f_path)
-                                except: pass
-                            st.error(f"ફાઈલ '{f_name}' રદ કરવામાં આવી છે!")
-                            st.rerun()
+                                with open(f_path, "rb") as f:
+                                    st.download_button("⬇️ Download", data=f.read(), file_name=f_name, key=f"dl_vault_main_{v_id}")
+                            else:
+                                st.error("File missing")
+                        with col_btn2:
+                            if st.button("🗑️ Delete", key=f"del_vault_{v_id}"):
+                                conn = sqlite3.connect(DB_FILE)
+                                c = conn.cursor()
+                                c.execute("DELETE FROM digital_vault WHERE id = ?", (v_id,))
+                                conn.commit()
+                                conn.close()
+                                push_db_to_github()
+                                if os.path.exists(f_path):
+                                    try: os.remove(f_path)
+                                    except: pass
+                                st.error(f"ફાઈલ '{f_name}' રદ કરવામાં આવી છે!")
+                                st.rerun()
