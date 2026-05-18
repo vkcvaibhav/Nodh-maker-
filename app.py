@@ -1666,7 +1666,7 @@ with tab5:
     if "auto_guj_words" not in st.session_state:
         st.session_state.auto_guj_words = ""
 
-    unfinished_pos_t5 = get_unfinished_pos()
+    unfinished_pos_t5 = get_unfinished_pos(('Unfinished', 'Payment_Generated'))
     
     if not unfinished_pos_t5:
         st.success("હાલમાં કોઈ બિલ પેમેન્ટ બાકી નથી! (No unfinished purchase orders).")
