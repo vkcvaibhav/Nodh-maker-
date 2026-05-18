@@ -141,13 +141,25 @@ def save_po_to_db(nondh_id, vendor_name, out_no, date, amount):
     push_db_to_github()
     return po_id
 
-def get_unfinished_pos():
+def get_unfinished_pos(statuses=('Unfinished',)):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("SELECT id, nondh_id, vendor_name, out_no, date, amount FROM purchase_orders WHERE status = 'Unfinished'")
+    # Create the correct number of placeholders (?) for our statuses
+    placeholders = ','.join(['?'] * len(statuses))
+    query = f"SELECT id, nondh_id, vendor_name, out_no, date, amount FROM purchase_orders WHERE status IN ({placeholders})"
+    c.execute(query, statuses)
     data = c.fetchall()
     conn.close()
     return data
+
+def mark_po_as_payment_generated(po_id):
+    """Updates the status so it disappears from Tab 4 but stays in Tab 5/6"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE purchase_orders SET status = 'Payment_Generated' WHERE id = ?", (po_id,))
+    conn.commit()
+    push_db_to_github()
+    conn.close()
 
 def mark_po_as_paid(po_id, payment_info=""):
     conn = sqlite3.connect(DB_FILE)
