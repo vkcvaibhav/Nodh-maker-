@@ -1683,25 +1683,24 @@ with tab5:
             with col_p2:
                 final_amt_pst = st.number_input("બીલની કુલ રકમ (Amount)", value=float(amt_t5), key="amt_t5")
                 
-                col_guj1, col_guj2 = st.columns([3, 1])
-                with col_guj1:
-                    amt_words_guj = st.text_input("રકમ શબ્દોમાં (ગુજરાતીમાં)", value=st.session_state.auto_guj_words, placeholder="દા.ત., ત્રણ હજાર નવસો છપ્પન")
-                with col_guj2:
-                    st.write("") 
-                    if st.button("✨ AI થી ભરો"):
-                        if api_key:
-                            with st.spinner("અનુવાદ થઈ રહ્યો છે..."):
-                                try:
-                                    genai.configure(api_key=api_key)
-                                    model = genai.GenerativeModel('gemini-3.1-pro-preview')
-                                    prompt = f"Translate the number {final_amt_pst} into Gujarati words. Return ONLY the Gujarati translation. Example: for 3956 return 'ત્રણ હજાર નવસો છપ્પન'."
-                                    res = model.generate_content(prompt)
-                                    st.session_state.auto_guj_words = res.text.strip()
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error("AI Error.")
-                        else:
-                            st.warning("API Key is required!")
+                # --- NEW: બટન વગર આપોઆપ અનુવાદ (Auto-Translate with Cache) ---
+                @st.cache_data(show_spinner=False)
+                def get_gujarati_words_auto(amount, key):
+                    if not key or amount == 0: return ""
+                    try:
+                        genai.configure(api_key=key)
+                        # ઝડપી પરિણામ માટે flash-lite મોડેલનો ઉપયોગ
+                        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+                        prompt = f"Translate the number {amount} into Gujarati words. Return ONLY the Gujarati translation. Example: for 3956 return 'ત્રણ હજાર નવસો છપ્પન'."
+                        res = model.generate_content(prompt)
+                        return res.text.strip()
+                    except:
+                        return ""
+                
+                # બેકગ્રાઉન્ડમાં ફંક્શન જાતે જ રકમ લેશે અને શબ્દો આપશે
+                auto_gujarati_text = get_gujarati_words_auto(final_amt_pst, api_key)
+                
+                amt_words_guj = st.text_input("રકમ શબ્દોમાં (ગુજરાતીમાં)", value=auto_gujarati_text, placeholder="દા.ત., ત્રણ હજાર નવસો છપ્પન")
                             
             st.markdown("#### 📝 મંજુરીની વિગતો (Approval Details - મુદ્દા નં. ૧)")
             col_a1, col_a2, col_a3 = st.columns(3)
