@@ -214,16 +214,24 @@ def save_file_to_vault(file_bytes, original_name, doc_type, nondh_id=None, descr
     safe_name = f"{timestamp}_{original_name}"
     file_path = os.path.join(folder_path, safe_name)
     
+    # 1. Save locally
     with open(file_path, "wb") as f: f.write(file_bytes)
         
+    # 2. Save metadata to database
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("INSERT INTO digital_vault (nondh_id, file_name, file_path, upload_date, financial_year, month, doc_type, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
               (nondh_id, original_name, file_path, upload_date.strftime("%Y-%m-%d"), fy, month_str, doc_type, description))
     conn.commit()
     conn.close()
+    
+    # 3. Sync SQLite DB changes to GitHub
     push_db_to_github()
-
+    
+    # FIX FIX FIX: Convert windows paths if any, and push the actual file to GitHub!
+    github_path = file_path.replace("\\", "/")
+    push_file_to_github(file_bytes, github_path)
+    
 def get_vault_files_by_nondh(nondh_id):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
