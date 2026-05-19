@@ -1517,10 +1517,11 @@ with tab2:
                             col1, col2 = st.columns([8, 2])
                             with col1: st.caption(f"**{d_type}**: {f_name} ({u_date}) - {desc}")
                             with col2:
-                                if os.path.exists(f_path):
-                                    with open(f_path, "rb") as f:
-                                        st.download_button("⬇️", data=f.read(), file_name=f_name, key=f"dl_v_{f_path}")
-                                else: st.error("Missing")
+                                file_data_t2 = load_vault_file_bytes(f_path)
+                                if file_data_t2:
+                                        st.download_button("⬇️", data=file_data_t2, file_name=f_name, key=f"dl_v_{f_path}")
+                                else: 
+                                    st.error("Missing")
 
 with tab3:
     st.markdown("### 📝 ખરીદી હુકમ બનાવો (Generate Purchase Order)")
