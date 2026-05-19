@@ -83,6 +83,36 @@ def push_file_to_github(file_bytes, github_path):
         repo.create_file(github_path, f"Uploaded {github_path}", file_bytes)
     except Exception as e:
         print(f"Failed to push file to GitHub: {e}")
+def pull_file_from_github(github_path):
+    """Downloads a missing document back from GitHub repository."""
+    repo = get_github_repo()
+    if not repo: return None
+    try:
+        file_content = repo.get_contents(github_path)
+        return file_content.decoded_content
+    except Exception as e:
+        print(f"Failed to pull file from GitHub: {e}")
+        return None
+
+def load_vault_file_bytes(file_path):
+    """Checks local storage first; if missing, pulls from GitHub and re-caches it."""
+    if os.path.exists(file_path):
+        with open(file_path, "rb") as f:
+            return f.read()
+    else:
+        # File is missing locally due to cloud reset; pull from cloud storage
+        github_path = file_path.replace("\\", "/")
+        file_bytes = pull_file_from_github(github_path)
+        if file_bytes:
+            try:
+                # Cache it locally again so subsequent calls are fast
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                with open(file_path, "wb") as f:
+                    f.write(file_bytes)
+            except Exception:
+                pass
+            return file_bytes
+    return None
 # ==========================================
 # Database Setup for Archiving, Workflow & Digital Vault
 # ==========================================
