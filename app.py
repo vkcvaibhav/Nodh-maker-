@@ -1989,12 +1989,14 @@ with tab6:
                         with col_info:
                             st.markdown(f"**{d_type}**: {f_name}")
                             st.caption(f"🗓️ {u_date} | 📁 {fy} ({month})")
-                        with col_btn1:
-                            if os.path.exists(f_path):
-                                with open(f_path, "rb") as f:
-                                    st.download_button("⬇️ Download", data=f.read(), file_name=f_name, key=f"dl_vault_main_{v_id}")
-                            else:
-                                st.error("File missing")
+            with col_btn1:
+                 # Use our intelligent cloud loader instead of direct os.path.exists
+                file_data = load_vault_file_bytes(f_path)
+                if file_data:
+                    st.download_button("⬇️ Download", data=file_data, file_name=f_name, key=f"dl_vault_main_{v_id}")
+                else:
+                    st.error("File missing completely")
+                    
                         with col_btn2:
                             if st.button("🗑️ Delete", key=f"del_vault_{v_id}"):
                                 conn = sqlite3.connect(DB_FILE)
