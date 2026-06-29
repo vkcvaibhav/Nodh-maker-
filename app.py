@@ -1232,13 +1232,13 @@ with tab1:
     with col1:
         text_prompt = st.text_area("તમારી જરૂરિયાત લખો:", placeholder="e.g., need 10 entomological pins...")
     with col2:
-        uploaded_image = st.file_uploader("અથવા હાથથી લખેલી ચબરખીનો ફોટો:", type=["jpg", "jpeg", "png"])
+        uploaded_image = st.file_uploader("અથવા PDF/ફોટો અપલોડ કરો:", type=["pdf", "jpg", "jpeg", "png"])
     
     if st.button("જનરેટ કરો (Generate)"):
         if not api_key:
             st.error("Please enter your Gemini API Key in the sidebar.")
         elif not text_prompt and not uploaded_image:
-            st.warning("Please provide either a text requirement or an image.")
+            st.warning("Please provide either a text requirement or a PDF/image.")
         else:
             with st.spinner("સ્ટેચ્યુટ ૧૨૧ ની ચકાસણી અને નોંધ તૈયાર કરવામાં આવી રહી છે..."):
                 try:
@@ -1300,7 +1300,10 @@ with tab1:
                     
                     inputs = [sys_prompt, text_prompt]
                     if uploaded_image:
-                        inputs.append(Image.open(uploaded_image))
+                        if uploaded_image.type == "application/pdf":
+                            inputs.append({"mime_type": "application/pdf", "data": uploaded_image.getvalue()})
+                        else:
+                            inputs.append(Image.open(uploaded_image))
                         
                     response = model.generate_content(inputs)
                     res_text = response.text
