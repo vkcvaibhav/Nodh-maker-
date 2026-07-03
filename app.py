@@ -825,6 +825,354 @@ def suggest_learning_from_nondh(api_key, original_doc, final_doc, subject, nondh
         queue_warning(f"Learning suggestion generation failed: {e}")
         return 0
 
+DASHBOARD_REQUIRED_DOCS = [
+    "Signed Nondh",
+    "Signed PO",
+    "Party Invoice",
+    "Signed Bill Payment",
+    "Signed Bill Pasting",
+]
+
+DASHBOARD_MONTHS = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+]
+
+def parse_dashboard_date(value):
+    """Parse common DB/UI date strings without throwing."""
+    if isinstance(value, datetime.datetime):
+        return value.date()
+    if isinstance(value, datetime.date):
+        return value
+    text = str(value or "").strip()
+    if not text:
+        return None
+    text = text.translate(GUJARATI_DIGIT_TRANS)
+    for fmt in ("%d/%m/%Y", "%d.%m.%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y", "%d.%m.%y"):
+        try:
+            return datetime.datetime.strptime(text, fmt).date()
+        except ValueError:
+            pass
+    parts = re.findall(r"\d+", text)
+    if len(parts) < 3:
+        return None
+    try:
+        if len(parts[0]) == 4:
+            year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+        else:
+            day, month, year = int(parts[0]), int(parts[1]), int(parts[2])
+            if year < 100:
+                year += 2000
+        return datetime.date(year, month, day)
+    except Exception:
+        return None
+
+def date_from_archive_fields(date_value, month_value, year_value):
+    parsed = parse_dashboard_date(date_value)
+    if parsed:
+        return parsed
+    try:
+        month_num = int(str(month_value or "").translate(GUJARATI_DIGIT_TRANS))
+        year_num = int(str(year_value or "").translate(GUJARATI_DIGIT_TRANS))
+        return datetime.date(year_num, month_num, 1)
+    except Exception:
+        return None
+
+def age_label(date_obj):
+    if not date_obj:
+        return "unknown date"
+    days = (datetime.date.today() - date_obj).days
+    if days < 0:
+        return "future"
+    if days <= 2:
+        return "fresh"
+    if days <= 10:
+        return "waiting"
+    return "overdue"
+
+def dashboard_date_text(date_obj):
+    return date_obj.strftime("%Y-%m-%d") if date_obj else ""
+
+def month_filter_matches(date_obj, month_text):
+    if month_text == "All":
+        return True
+    if not date_obj:
+        return False
+    return date_obj.strftime("%B") == month_text
+
+def fy_filter_matches(date_obj, fy_text):
+    if fy_text == "All":
+        return True
+    if not date_obj:
+        return False
+    return get_financial_year(date_obj) == fy_text
+
+def matches_dashboard_filters(date_obj, fy_filter="All", month_filter="All"):
+    return fy_filter_matches(date_obj, fy_filter) and month_filter_matches(date_obj, month_filter)
+
+def fetch_dashboard_rows():
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    data = {"archives": [], "purchase_orders": [], "vault": [], "errors": []}
+    try:
+        c.execute("SELECT id, date, month, year, subject, content FROM archive ORDER BY id DESC")
+        data["archives"] = c.fetchall()
+    except Exception as e:
+        data["errors"].append(f"Could not read archive table: {e}")
+    try:
+        c.execute("""SELECT id, nondh_id, vendor_name, out_no, date, amount, status, payment_info
+                     FROM purchase_orders ORDER BY id DESC""")
+        data["purchase_orders"] = c.fetchall()
+    except Exception as e:
+        data["errors"].append(f"Could not read purchase_orders table: {e}")
+    try:
+        c.execute("""SELECT id, nondh_id, file_name, file_path, upload_date, financial_year, month, doc_type, description
+                     FROM digital_vault ORDER BY id DESC""")
+        data["vault"] = c.fetchall()
+    except Exception as e:
+        data["errors"].append(f"Could not read digital_vault table: {e}")
+    conn.close()
+    return data
+
+def count_pending_learning_items():
+    counts = {"memories": 0, "skills": 0}
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    try:
+        c.execute("SELECT COUNT(*) FROM memory_suggestions WHERE status = 'Pending'")
+        counts["memories"] = int(c.fetchone()[0] or 0)
+    except Exception:
+        counts["memories"] = 0
+    try:
+        c.execute("SELECT COUNT(*) FROM skill_suggestions WHERE status = 'Pending'")
+        counts["skills"] = int(c.fetchone()[0] or 0)
+    except Exception:
+        counts["skills"] = 0
+    conn.close()
+    return counts
+
+def build_dashboard_data(fy_filter="All", month_filter="All"):
+    raw = fetch_dashboard_rows()
+    learning_counts = count_pending_learning_items()
+
+    archives = []
+    for row in raw["archives"]:
+        nondh_id, date_text, month_text, year_text, subject, content = row
+        date_obj = date_from_archive_fields(date_text, month_text, year_text)
+        if matches_dashboard_filters(date_obj, fy_filter, month_filter):
+            archives.append({
+                "id": nondh_id, "date": date_obj, "date_text": date_text,
+                "subject": subject or "", "content": content or "",
+            })
+
+    all_pos = []
+    filtered_pos = []
+    for row in raw["purchase_orders"]:
+        po_id, nondh_id, vendor, out_no, date_text, amount, status, payment_info = row
+        date_obj = parse_dashboard_date(date_text)
+        po = {
+            "id": po_id, "nondh_id": nondh_id, "vendor": vendor or "", "out_no": out_no or "",
+            "date": date_obj, "date_text": date_text or "", "amount": coerce_amount(amount),
+            "status": status or "Unfinished", "payment_info": payment_info or "",
+        }
+        all_pos.append(po)
+        if matches_dashboard_filters(date_obj, fy_filter, month_filter):
+            filtered_pos.append(po)
+
+    vault_by_nondh = {}
+    all_vault_records = []
+    filtered_vault_records = []
+    for row in raw["vault"]:
+        vault_id, nondh_id, file_name, file_path, upload_date, fy, month, doc_type, description = row
+        upload_dt = parse_dashboard_date(upload_date)
+        record = {
+            "id": vault_id, "nondh_id": nondh_id, "file_name": file_name or "",
+            "file_path": file_path or "", "upload_date": upload_dt, "financial_year": fy or "",
+            "month": month or "", "doc_type": doc_type or "", "description": description or "",
+        }
+        all_vault_records.append(record)
+        if nondh_id:
+            vault_by_nondh.setdefault(nondh_id, {}).setdefault(doc_type or "", []).append(record)
+        fy_ok = fy_filter == "All" or fy == fy_filter or fy_filter_matches(upload_dt, fy_filter)
+        month_ok = month_filter == "All" or month == month_filter or month_filter_matches(upload_dt, month_filter)
+        if fy_ok and month_ok:
+            filtered_vault_records.append(record)
+
+    archive_by_id = {item["id"]: item for item in archives}
+    all_archive_ids = {row[0] for row in raw["archives"]}
+    all_po_by_nondh = {}
+    for po in all_pos:
+        if po["nondh_id"]:
+            all_po_by_nondh.setdefault(po["nondh_id"], []).append(po)
+
+    po_by_nondh = {}
+    for po in filtered_pos:
+        if po["nondh_id"]:
+            po_by_nondh.setdefault(po["nondh_id"], []).append(po)
+
+    workflow_keys = []
+    for archive in archives:
+        workflow_keys.append(("nondh", archive["id"]))
+    for po in filtered_pos:
+        if po["nondh_id"]:
+            key = ("nondh", po["nondh_id"])
+        else:
+            key = ("po", po["id"])
+        if key not in workflow_keys:
+            workflow_keys.append(key)
+
+    document_rows = []
+    missing_document_total = 0
+    for key_type, key_id in workflow_keys:
+        nondh_id = key_id if key_type == "nondh" else None
+        related_pos = po_by_nondh.get(nondh_id, []) if nondh_id else [po for po in filtered_pos if po["id"] == key_id]
+        latest_po = related_pos[0] if related_pos else None
+        archive = archive_by_id.get(nondh_id) if nondh_id else None
+        existing_docs = set(vault_by_nondh.get(nondh_id, {}).keys()) if nondh_id else set()
+        missing_docs = [doc for doc in DASHBOARD_REQUIRED_DOCS if doc not in existing_docs]
+        missing_document_total += len(missing_docs)
+        document_rows.append({
+            "Nondh ID": nondh_id or "",
+            "PO ID": latest_po["id"] if latest_po else "",
+            "Subject / Vendor": archive["subject"] if archive else (latest_po["vendor"] if latest_po else ""),
+            "Signed Nondh": "Yes" if "Signed Nondh" in existing_docs else "Missing",
+            "Signed PO": "Yes" if "Signed PO" in existing_docs else "Missing",
+            "Party Invoice": "Yes" if "Party Invoice" in existing_docs else "Missing",
+            "Signed Bill Payment": "Yes" if "Signed Bill Payment" in existing_docs else "Missing",
+            "Signed Bill Pasting": "Yes" if "Signed Bill Pasting" in existing_docs else "Missing",
+            "Missing Items": ", ".join(missing_docs),
+            "Missing Count": len(missing_docs),
+        })
+
+    next_actions = []
+    for archive in archives:
+        if not all_po_by_nondh.get(archive["id"]):
+            next_actions.append({
+                "Priority": "High" if age_label(archive["date"]) == "overdue" else "Normal",
+                "Workflow": "Nondh saved but no PO",
+                "Nondh ID": archive["id"],
+                "PO ID": "",
+                "Subject / Vendor": archive["subject"],
+                "Action": "Create purchase order or close if not required",
+                "Age": age_label(archive["date"]),
+                "Date": dashboard_date_text(archive["date"]),
+                "Amount": "",
+            })
+
+    for po in filtered_pos:
+        existing_docs = set(vault_by_nondh.get(po["nondh_id"], {}).keys()) if po["nondh_id"] else set()
+        subject = archive_by_id.get(po["nondh_id"], {}).get("subject", po["vendor"]) if po["nondh_id"] else po["vendor"]
+        if "Party Invoice" not in existing_docs and po["status"] in ("Unfinished", "Payment_Generated"):
+            next_actions.append({
+                "Priority": "High" if age_label(po["date"]) == "overdue" else "Normal",
+                "Workflow": "PO created but party invoice missing",
+                "Nondh ID": po["nondh_id"] or "",
+                "PO ID": po["id"],
+                "Subject / Vendor": subject,
+                "Action": "Upload party invoice in Bill Payment",
+                "Age": age_label(po["date"]),
+                "Date": dashboard_date_text(po["date"]),
+                "Amount": format_amount(po["amount"]),
+            })
+        if po["status"] == "Payment_Generated" and "Signed Bill Pasting" not in existing_docs:
+            next_actions.append({
+                "Priority": "High",
+                "Workflow": "Payment form generated but bill pasting missing",
+                "Nondh ID": po["nondh_id"] or "",
+                "PO ID": po["id"],
+                "Subject / Vendor": subject,
+                "Action": "Generate/upload signed bill pasting form",
+                "Age": age_label(po["date"]),
+                "Date": dashboard_date_text(po["date"]),
+                "Amount": format_amount(po["amount"]),
+            })
+        signed_missing = [doc for doc in ("Signed Nondh", "Signed PO", "Signed Bill Payment", "Signed Bill Pasting") if doc not in existing_docs]
+        if signed_missing:
+            next_actions.append({
+                "Priority": "Normal",
+                "Workflow": "Signed documents missing in vault",
+                "Nondh ID": po["nondh_id"] or "",
+                "PO ID": po["id"],
+                "Subject / Vendor": subject,
+                "Action": "Upload: " + ", ".join(signed_missing),
+                "Age": age_label(po["date"]),
+                "Date": dashboard_date_text(po["date"]),
+                "Amount": format_amount(po["amount"]),
+            })
+
+    if learning_counts["memories"] or learning_counts["skills"]:
+        next_actions.append({
+            "Priority": "Normal",
+            "Workflow": "Learning suggestions waiting for approval",
+            "Nondh ID": "",
+            "PO ID": "",
+            "Subject / Vendor": "Memory and skill queue",
+            "Action": f"Review {learning_counts['memories']} memory and {learning_counts['skills']} skill suggestions",
+            "Age": "waiting",
+            "Date": "",
+            "Amount": "",
+        })
+
+    status_order = {"High": 0, "Normal": 1}
+    next_actions = sorted(next_actions, key=lambda row: (status_order.get(row["Priority"], 2), row["Age"] != "overdue", row["Date"]))
+
+    pending_payments = []
+    for po in filtered_pos:
+        if po["status"] != "Paid":
+            pending_payments.append({
+                "PO ID": po["id"],
+                "Nondh ID": po["nondh_id"] or "",
+                "Vendor": po["vendor"],
+                "Outward No": po["out_no"],
+                "Status": po["status"],
+                "Date": dashboard_date_text(po["date"]),
+                "Age": age_label(po["date"]),
+                "Amount": format_amount(po["amount"]),
+            })
+
+    metrics = {
+        "total_nondhs": len(archives),
+        "nondhs_awaiting_po": sum(1 for item in archives if not all_po_by_nondh.get(item["id"])),
+        "unfinished_pos": sum(1 for po in filtered_pos if po["status"] == "Unfinished"),
+        "payment_forms_generated": sum(1 for po in filtered_pos if po["status"] == "Payment_Generated"),
+        "paid_bills": sum(1 for po in filtered_pos if po["status"] == "Paid"),
+        "pending_amount": sum(po["amount"] for po in filtered_pos if po["status"] != "Paid"),
+        "paid_amount": sum(po["amount"] for po in filtered_pos if po["status"] == "Paid"),
+        "missing_documents": missing_document_total,
+        "pending_memory_suggestions": learning_counts["memories"],
+        "pending_skill_suggestions": learning_counts["skills"],
+        "vault_documents": len(filtered_vault_records),
+    }
+
+    return {
+        "filters": {"financial_year": fy_filter, "month": month_filter},
+        "metrics": metrics,
+        "next_actions": next_actions,
+        "document_rows": document_rows,
+        "pending_payments": pending_payments,
+        "money_summary": [
+            {"Bucket": "Pending", "Count": sum(1 for po in filtered_pos if po["status"] != "Paid"), "Amount": format_amount(metrics["pending_amount"])},
+            {"Bucket": "Paid", "Count": metrics["paid_bills"], "Amount": format_amount(metrics["paid_amount"])},
+        ],
+        "learning_queue": [
+            {"Queue": "Pending memory suggestions", "Count": learning_counts["memories"]},
+            {"Queue": "Pending skill suggestions", "Count": learning_counts["skills"]},
+        ],
+        "errors": raw["errors"],
+    }
+
+def build_dashboard_coach_prompt(dashboard_data):
+    metrics = dashboard_data.get("metrics", {})
+    payload = {
+        "filters": dashboard_data.get("filters", {}),
+        "metrics": metrics,
+        "top_next_actions": dashboard_data.get("next_actions", [])[:12],
+        "document_gaps": [row for row in dashboard_data.get("document_rows", []) if row.get("Missing Count", 0) > 0][:12],
+        "pending_payments": dashboard_data.get("pending_payments", [])[:12],
+        "learning_queue": dashboard_data.get("learning_queue", []),
+    }
+    return redact_sensitive(json.dumps(payload, ensure_ascii=False, indent=2))
+
 def delete_vault_record(vault_id, nondh_id, file_path):
     """વોલ્ટમાંથી ફાઈલ કાઢે છે, અને જો Nondh જોડાયેલી હોય તો તેને પણ કાઢીને GitHub પર સિન્ક કરે છે."""
     conn = sqlite3.connect(DB_FILE)
@@ -1770,7 +2118,8 @@ else:
     st.sidebar.warning('Gemini API key missing. Add GEMINI_API_KEY in Streamlit secrets.')
 
 # --- ADDED TAB 6 ---
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab0, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "Dashboard",
     "નવી સાદર નોંધ (Create)", 
     "જુની નોંધ (Archives)", 
     "ખરીદી હુકમ (Purchase Order)",
@@ -1778,6 +2127,135 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "બિલ પેસ્ટિંગ (Bill Pasting)",
     "🗄️ ડિજિટલ આર્કાઇવ (Digital Vault)"  # <-- NEW TAB
 ])
+
+with tab0:
+    st.markdown("### Workflow Dashboard")
+
+    current_year_for_dashboard = datetime.date.today().year
+    dashboard_fy_options = ["All"] + [f"{y}-{str(y + 1)[2:]}" for y in range(current_year_for_dashboard - 2, current_year_for_dashboard + 3)][::-1]
+    dashboard_month_options = ["All"] + DASHBOARD_MONTHS
+
+    filter_col1, filter_col2 = st.columns(2)
+    with filter_col1:
+        dashboard_fy = st.selectbox("Financial Year", dashboard_fy_options, key="dashboard_fy_filter")
+    with filter_col2:
+        dashboard_month = st.selectbox("Month", dashboard_month_options, key="dashboard_month_filter")
+
+    dashboard_data = build_dashboard_data(dashboard_fy, dashboard_month)
+    dashboard_metrics = dashboard_data["metrics"]
+
+    if dashboard_data.get("errors"):
+        with st.expander("Dashboard data warnings", expanded=False):
+            for dashboard_error in dashboard_data["errors"]:
+                st.warning(dashboard_error)
+
+    metric_cards = [
+        ("Total Nondhs", dashboard_metrics["total_nondhs"]),
+        ("Awaiting PO", dashboard_metrics["nondhs_awaiting_po"]),
+        ("Unfinished POs", dashboard_metrics["unfinished_pos"]),
+        ("Payment Forms", dashboard_metrics["payment_forms_generated"]),
+        ("Paid Bills", dashboard_metrics["paid_bills"]),
+        ("Pending Amount", f"Rs. {format_amount(dashboard_metrics['pending_amount'])}"),
+        ("Paid Amount", f"Rs. {format_amount(dashboard_metrics['paid_amount'])}"),
+        ("Missing Documents", dashboard_metrics["missing_documents"]),
+        ("Memory Queue", dashboard_metrics["pending_memory_suggestions"]),
+        ("Skill Queue", dashboard_metrics["pending_skill_suggestions"]),
+    ]
+
+    for start in (0, 5):
+        metric_cols = st.columns(5)
+        for col, (label, value) in zip(metric_cols, metric_cards[start:start + 5]):
+            with col:
+                st.metric(label, value)
+
+    if (
+        dashboard_metrics["total_nondhs"] == 0
+        and dashboard_metrics["unfinished_pos"] == 0
+        and dashboard_metrics["payment_forms_generated"] == 0
+        and dashboard_metrics["paid_bills"] == 0
+    ):
+        st.info("No workflow records found for the selected filters yet.")
+
+    st.markdown("---")
+    summary_col1, summary_col2 = st.columns(2)
+    with summary_col1:
+        st.markdown("#### Money Summary")
+        st.dataframe(pd.DataFrame(dashboard_data["money_summary"]), use_container_width=True, hide_index=True)
+    with summary_col2:
+        st.markdown("#### Learning Queue")
+        st.dataframe(pd.DataFrame(dashboard_data["learning_queue"]), use_container_width=True, hide_index=True)
+
+    st.markdown("#### Next Actions")
+    if dashboard_data["next_actions"]:
+        st.dataframe(pd.DataFrame(dashboard_data["next_actions"]), use_container_width=True, hide_index=True)
+    else:
+        st.success("No urgent next actions for the selected filters.")
+
+    st.markdown("#### Document Gaps")
+    document_gaps = [row for row in dashboard_data["document_rows"] if row.get("Missing Count", 0) > 0]
+    if document_gaps:
+        st.warning(f"{sum(row.get('Missing Count', 0) for row in document_gaps)} required document slots are still missing.")
+        st.dataframe(pd.DataFrame(document_gaps), use_container_width=True, hide_index=True)
+    elif dashboard_data["document_rows"]:
+        st.success("All tracked workflow document slots are complete for the selected filters.")
+    else:
+        st.info("No Nondh/PO workflow rows to check yet.")
+
+    st.markdown("#### Pending Payments")
+    if dashboard_data["pending_payments"]:
+        st.dataframe(pd.DataFrame(dashboard_data["pending_payments"]), use_container_width=True, hide_index=True)
+    else:
+        st.success("No pending payment rows for the selected filters.")
+
+    with st.expander("AI Workflow Coach", expanded=False):
+        st.caption("Runs only when clicked and uses the dashboard summary plus approved learning memories/skills.")
+        if st.button("Summarize Bottlenecks", key="dashboard_ai_workflow_coach"):
+            if not api_key:
+                st.warning("Add GEMINI_API_KEY in Streamlit secrets to use the AI Workflow Coach.")
+            else:
+                with st.spinner("Reviewing workflow bottlenecks..."):
+                    try:
+                        coach_payload = build_dashboard_coach_prompt(dashboard_data)
+                        coach_learning = get_learning_context(
+                            coach_payload,
+                            ["general_workflow", "bill_payment", "bill_pasting", "invoice_extraction", "register_rule"],
+                            "dashboard_coach",
+                            memory_limit=6,
+                            skill_limit=3,
+                        )
+                        genai.configure(api_key=api_key)
+                        coach_model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+                        coach_prompt = f"""
+You are the AI Workflow Coach for Nodh Maker.
+Use only the dashboard JSON and approved learning context below. Do not request, reveal, store, or infer any API keys or secrets.
+Return a concise operational summary with:
+1. Biggest bottleneck.
+2. Next 5 actions in priority order.
+3. Document gaps to fix first.
+4. Money/payment risk summary.
+5. Learning queue recommendation.
+
+Dashboard JSON:
+{coach_payload}
+
+Approved memories and Hermes-style skills:
+{coach_learning['prompt'] if coach_learning['prompt'] else 'No approved learning context matched.'}
+"""
+                        coach_response = coach_model.generate_content(coach_prompt)
+                        st.markdown(redact_sensitive(coach_response.text))
+                        with st.expander("Coach context used", expanded=False):
+                            if coach_learning["memories"]:
+                                st.markdown("**Memories**")
+                                for memory in coach_learning["memories"]:
+                                    st.caption(f"#{memory['id']} {memory['title']} ({memory['category']})")
+                            if coach_learning["skills"]:
+                                st.markdown("**Skills**")
+                                for skill in coach_learning["skills"]:
+                                    st.caption(f"#{skill['id']} {skill['name']} v{skill['version']}")
+                            if not coach_learning["memories"] and not coach_learning["skills"]:
+                                st.caption("No approved memories or skills were selected.")
+                    except Exception as e:
+                        st.warning(f"AI Workflow Coach failed: {e}")
 
 with tab1:
     st.markdown("### જરૂરિયાતની વિગત આપો (Provide Requirements)")
