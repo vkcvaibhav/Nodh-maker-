@@ -118,6 +118,43 @@ def load_vault_file_bytes(file_path):
 # ==========================================
 DB_FILE = "sadar_nondh_archive.db"
 
+GUJARATI_DIGIT_TRANS = str.maketrans("૦૧૨૩૪૫૬૭૮૯", "0123456789")
+
+def coerce_amount(value, default=0.0):
+    """Convert DB/AI/UI currency values to a safe float."""
+    try:
+        default_value = float(default)
+    except (TypeError, ValueError):
+        default_value = 0.0
+
+    if value is None:
+        return default_value
+
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            if pd.isna(value):
+                return default_value
+        except Exception:
+            pass
+        return float(value)
+
+    text = str(value).strip().translate(GUJARATI_DIGIT_TRANS)
+    if not text:
+        return default_value
+
+    text = text.replace(",", "")
+    match = re.search(r"-?\d+(?:\.\d+)?", text)
+    if not match:
+        return default_value
+
+    try:
+        return float(match.group(0))
+    except ValueError:
+        return default_value
+
+def format_amount(value, default=0.0):
+    return f"{coerce_amount(value, default):.2f}"
+
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -161,6 +198,7 @@ def save_to_db(subject, content):
     return nondh_id
 
 def save_po_to_db(nondh_id, vendor_name, out_no, date, amount):
+    amount = coerce_amount(amount)
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("INSERT INTO purchase_orders (nondh_id, vendor_name, out_no, date, amount, status) VALUES (?, ?, ?, ?, ?, 'Unfinished')", 
@@ -204,6 +242,7 @@ def delete_po(po_id):
     c = conn.cursor()
     c.execute("DELETE FROM purchase_orders WHERE id = ?", (po_id,))
     conn.commit()
+    push_db_to_github()
     conn.close()
 
 def get_archives(month, year, keyword=""):
@@ -749,6 +788,7 @@ def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_
     
 # --- Bill Payment Form ---
 def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount, amount_words):
+    amount = coerce_amount(amount)
     doc = Document()
     for section in doc.sections:
         section.top_margin, section.bottom_margin = Inches(0.8), Inches(0.8)
@@ -811,7 +851,7 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
     row[0].text = "1"
     row[1].text = f"No: {bill_no}\nDt: {bill_date}"
     row[2].text = party_name
-    row[3].text = f"{float(amount):.2f}"
+    row[3].text = format_amount(amount)
     
     for i in range(4): 
         row[i].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -822,7 +862,7 @@ def create_bill_payment_form(budget_head, bill_no, bill_date, party_name, amount
     p_tot = total_row[0].paragraphs[0]
     p_tot.add_run("Total:   ").bold = True
     p_tot.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    total_row[3].text = f"{float(amount):.2f}"
+    total_row[3].text = format_amount(amount)
     total_row[3].paragraphs[0].runs[0].bold = True
     total_row[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
@@ -901,6 +941,7 @@ def set_cell_border(cell, **kwargs):
                     element.set(qn('w:{}'.format(key)), str(edge_data[key]))
 
 def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount_in_guj_words, reg_type, reg_page_no, bill_reg_date, bill_reg_page_no, bill_reg_sr_no, item_no, approval_no, approval_date):
+    amount = coerce_amount(amount)
     doc = Document()
     
     # --- Helper to convert English digits to Gujarati digits ---
@@ -1041,7 +1082,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     
     add_p2_header_row(top_table.cell(2,0), "બીલની કુલ રકમ")
     add_p2_header_row(top_table.cell(2,1), ":-")
-    add_p2_header_row(top_table.cell(2,2), f"{float(amount):.2f}") 
+    add_p2_header_row(top_table.cell(2,2), format_amount(amount)) 
     
     add_p2_header_row(top_table.cell(3,0), "ચુકવણું કરવામાં આવનાર પાર્ટીનું નામ (અંગ્રેજી કેપીટલ લેટર)")
     add_p2_header_row(top_table.cell(3,1), ":-")
@@ -1642,9 +1683,10 @@ with tab4:
         for po in unfinished_pos:
             # FIXED: Added nondh_id_t4 to catch all 6 items from the database
             po_id, nondh_id_t4, v_name, o_no, p_date, amt = po
-            label = f"PO #{o_no} - {v_name} - ₹{float(amt):.2f} ({p_date})"
+            amt = coerce_amount(amt)
+            label = f"PO #{o_no} - {v_name} - ₹{format_amount(amt)} ({p_date})"
             po_options_tab4.append(label)
-            po_dict_tab4[label] = po
+            po_dict_tab4[label] = (po_id, nondh_id_t4, v_name, o_no, p_date, amt)
             
         selected_po_label_t4 = st.selectbox("પેમેન્ટ ફોર્મ માટે ઓર્ડર પસંદ કરો (Select Pending PO):", po_options_tab4, key="po_tab4")
         
@@ -1652,11 +1694,18 @@ with tab4:
             # FIXED: Added nondh_id_t4 here as well
             po_id, nondh_id_t4, v_name, o_no, p_date, amt = po_dict_tab4[selected_po_label_t4]
             
-            if st.session_state.get("current_po_id_t4") != po_id:
+            if (
+                st.session_state.get("current_po_id_t4") != po_id
+                or "amt_t4" not in st.session_state
+                or "ext_amt" not in st.session_state
+                or "ext_bill_no" not in st.session_state
+                or "ext_words" not in st.session_state
+                or "last_invoice" not in st.session_state
+            ):
                 st.session_state.current_po_id_t4 = po_id
                 st.session_state.ext_bill_no = "INV-"
-                st.session_state.ext_amt = float(amt)
-                st.session_state.amt_t4 = float(amt)
+                st.session_state.ext_amt = coerce_amount(amt)
+                st.session_state.amt_t4 = coerce_amount(amt)
                 st.session_state.ext_words = ""
                 st.session_state.last_invoice = None
 
@@ -1710,14 +1759,11 @@ with tab4:
                                 data = json.loads(res_text)
                                 
                                 # --- બીજો સુધારો: રકમમાંથી કોમા (,) અને અન્ય ચિન્હો સાફ કરો ---
-                                raw_amount = data.get("amount", amt)
-                                if isinstance(raw_amount, str):
-                                    # આ કોડ 3,894.00 ને 3894.00 માં ફેરવી નાખશે
-                                    raw_amount = re.sub(r'[^\d.]', '', str(raw_amount))
+                                raw_amount = coerce_amount(data.get("amount", amt), amt)
                                 
                                 st.session_state.ext_bill_no = str(data.get("bill_no", "INV-"))
-                                st.session_state.ext_amt = float(raw_amount)
-                                st.session_state.amt_t4 = float(raw_amount)
+                                st.session_state.ext_amt = raw_amount
+                                st.session_state.amt_t4 = raw_amount
                                 st.session_state.ext_words = str(data.get("amount_words", ""))
                                 st.session_state.last_invoice = invoice_upload.name
                                 st.rerun() 
@@ -1726,7 +1772,7 @@ with tab4:
 
             with col_b2:
                 bill_date = st.date_input("ઇન્વોઇસની તારીખ (Bill Date)", value=datetime.date.today())
-                final_amt = st.number_input("ચૂકવવા પાત્ર રકમ (Amount to Pay)", value=st.session_state.ext_amt, key="amt_t4")
+                final_amt = st.number_input("ચૂકવવા પાત્ર રકમ (Amount to Pay)", min_value=0.0, step=1.0, format="%.2f", key="amt_t4")
                 
                 # --- NEW FEATURE: Auto-fill English words based on Amount ---
                 col_eng1, col_eng2 = st.columns([3, 1])
@@ -1779,9 +1825,10 @@ with tab5:
         for po in unfinished_pos_t5:
             # FIXED: Added nondh_id_t5 to catch all 6 items from the database
             po_id, nondh_id_t5, v_name, o_no, p_date, amt = po
-            label = f"PO #{o_no} - {v_name} - ₹{amt} ({p_date})"
+            amt = coerce_amount(amt)
+            label = f"PO #{o_no} - {v_name} - ₹{format_amount(amt)} ({p_date})"
             po_options_tab5.append(label)
-            po_dict_tab5[label] = po
+            po_dict_tab5[label] = (po_id, nondh_id_t5, v_name, o_no, p_date, amt)
             
         selected_po_label_t5 = st.selectbox("પેસ્ટિંગ ફોર્મ માટે ઓર્ડર પસંદ કરો:", po_options_tab5, key="po_tab5")
         
@@ -1797,14 +1844,16 @@ with tab5:
             with col_p2:
                 # --- નવો સુધારો: Streamlit ની મેમરીને સીધી અપડેટ કરવા માટેનું લોજીક ---
                 # જો Tab 4 માં આ જ ઓર્ડર ખૂલ્યો હોય અને ત્યાં રકમ સેટ હોય, તો Tab 5 ની મેમરી ફરજિયાત ઓવરરાઈટ કરો
-                if st.session_state.get("current_po_id_t4") == po_id_t5 and "amt_t4" in st.session_state:
-                    st.session_state['amt_t5'] = float(st.session_state.amt_t4)
-                elif "amt_t5" not in st.session_state:
-                    # જો એપ પહેલી વાર રિફ્રેશ થઈ હોય
-                    st.session_state['amt_t5'] = float(amt_t5)
+                amount_from_tab4 = st.session_state.get("current_po_id_t4") == po_id_t5 and "amt_t4" in st.session_state
+                amount_for_t5 = coerce_amount(st.session_state.amt_t4) if amount_from_tab4 else coerce_amount(amt_t5)
+                if st.session_state.get("current_po_id_t5") != po_id_t5:
+                    st.session_state.current_po_id_t5 = po_id_t5
+                    st.session_state['amt_t5'] = amount_for_t5
+                elif amount_from_tab4:
+                    st.session_state['amt_t5'] = amount_for_t5
                 
                 # નોંધ: અહીથી `value=...` કાઢી નાખ્યું છે, કારણ કે તે સીધું `key="amt_t5"` ની મેમરીમાંથી જ લેટેસ્ટ રકમ ખેંચી લેશે
-                final_amt_pst = st.number_input("બીલની કુલ રકમ (Amount)", key="amt_t5")
+                final_amt_pst = st.number_input("બીલની કુલ રકમ (Amount)", min_value=0.0, step=1.0, format="%.2f", key="amt_t5")
                 
                 # --- બટન વગર આપોઆપ ગુજરાતી અનુવાદ (Auto-Translate) ---
                 @st.cache_data(show_spinner=False)
@@ -1876,7 +1925,7 @@ with tab6:
         pending_pos = get_unfinished_pos(('Unfinished', 'Payment_Generated'))
         if not pending_pos: st.info("કોઈ પેમેન્ટ બાકી નથી.")
         else:
-            p_dict = {f"PO #{p[3]} - {p[2]} (₹{p[5]})": p for p in pending_pos}
+            p_dict = {f"PO #{p[3]} - {p[2]} (₹{format_amount(p[5])})": p for p in pending_pos}
             sel_pay = st.selectbox("પેમેન્ટ થયેલ ઓર્ડર પસંદ કરો:", list(p_dict.keys()))
             if sel_pay:
                 po_data = p_dict[sel_pay]
