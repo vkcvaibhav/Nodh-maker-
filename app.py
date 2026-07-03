@@ -11,6 +11,7 @@ import requests
 import pandas as pd
 import re
 import os
+import json
 
 # Word Document Generation Imports
 from docx import Document
@@ -203,10 +204,41 @@ def init_db():
                   nondh_id INTEGER, vendor_name TEXT, out_no TEXT, date TEXT, amount REAL, status TEXT, payment_info TEXT)''')
                   
     # Table for Digital Vault (Uploaded PDFs/Images & Drafts) - Added nondh_id
-    c.execute('''CREATE TABLE IF NOT EXISTS digital_vault 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
-                  nondh_id INTEGER, file_name TEXT, file_path TEXT, upload_date TEXT, 
+    c.execute('''CREATE TABLE IF NOT EXISTS digital_vault
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  nondh_id INTEGER, file_name TEXT, file_path TEXT, upload_date TEXT,
                   financial_year TEXT, month TEXT, doc_type TEXT, description TEXT)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS app_memories
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  category TEXT, title TEXT, content TEXT, keywords TEXT,
+                  priority INTEGER DEFAULT 5, active INTEGER DEFAULT 1,
+                  source_type TEXT, source_id TEXT, created_at TEXT, updated_at TEXT)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS memory_suggestions
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  category TEXT, title TEXT, suggested_content TEXT, keywords TEXT,
+                  priority INTEGER DEFAULT 5, reason TEXT, source_type TEXT, source_id TEXT,
+                  source_snapshot TEXT, status TEXT DEFAULT 'Pending',
+                  created_at TEXT, updated_at TEXT)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS app_skills
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT, trigger_keywords TEXT, goal TEXT, steps TEXT, examples TEXT,
+                  validation_rules TEXT, priority INTEGER DEFAULT 5, active INTEGER DEFAULT 1,
+                  version INTEGER DEFAULT 1, created_at TEXT, updated_at TEXT)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS skill_suggestions
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT, trigger_keywords TEXT, goal TEXT, steps TEXT, examples TEXT,
+                  validation_rules TEXT, priority INTEGER DEFAULT 5, reason TEXT,
+                  source_type TEXT, source_id TEXT, source_snapshot TEXT,
+                  status TEXT DEFAULT 'Pending', created_at TEXT, updated_at TEXT)''')
+
+    c.execute('''CREATE TABLE IF NOT EXISTS skill_runs
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  skill_id INTEGER, skill_name TEXT, workflow TEXT, context_summary TEXT,
+                  outcome TEXT, source_id TEXT, created_at TEXT)''')
                   
     # Safe Database Schema Upgrades for existing users
     try: c.execute("ALTER TABLE purchase_orders ADD COLUMN nondh_id INTEGER")
@@ -379,6 +411,420 @@ def get_vault_files(fy="All", doc_type="All", search_keyword=""):
     conn.close()
     return data
 
+# --- Learning Memory & Hermes-style Skill Helpers ---
+LEARNING_CATEGORIES = [
+    "nondh_style", "statute_precedent", "item_mapping", "vendor_default",
+    "budget_default", "invoice_extraction", "bill_payment", "bill_pasting",
+    "register_rule", "general_workflow"
+]
+
+def now_iso():
+    return datetime.datetime.now().isoformat(timespec="seconds")
+
+def compact_text(text, limit=1500):
+    text = re.sub(r"\s+", " ", str(text or "")).strip()
+    return text[:limit]
+
+def redact_sensitive(text):
+    text = str(text or "")
+    text = re.sub(r"AIza[0-9A-Za-z_-]{20,}", "[REDACTED_GEMINI_KEY]", text)
+    text = re.sub(r"gh[pousr]_[0-9A-Za-z_]{20,}", "[REDACTED_GITHUB_TOKEN]", text)
+    text = re.sub(r"(?i)(api[_\s-]*key|token|secret)\s*[:=]\s*[^\s,;]+", r"\1=[REDACTED]", text)
+    return text
+
+def keyword_tokens(text):
+    return set(re.findall(r"[\w\u0A80-\u0AFF]+", str(text or "").lower()))
+
+def parse_keywords(text):
+    return [kw.strip().lower() for kw in re.split(r"[,;\n]+", str(text or "")) if kw.strip()]
+
+def learning_score(context, keywords, title="", category="", wanted_categories=None, priority=5):
+    context_l = str(context or "").lower()
+    tokens = keyword_tokens(context_l)
+    score = int(priority or 0)
+    if wanted_categories and category in wanted_categories:
+        score += 6
+    if category == "general_workflow":
+        score += 2
+    for kw in parse_keywords(keywords):
+        if kw in context_l:
+            score += 7
+        elif kw in tokens:
+            score += 4
+    title_l = str(title or "").lower()
+    if title_l and title_l in context_l:
+        score += 4
+    return score
+
+def list_memories(include_inactive=True, status_active_only=False):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    query = "SELECT id, category, title, content, keywords, priority, active, source_type, source_id, created_at, updated_at FROM app_memories"
+    if status_active_only or not include_inactive:
+        query += " WHERE active = 1"
+    query += " ORDER BY active DESC, priority DESC, updated_at DESC, id DESC"
+    c.execute(query)
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def list_memory_suggestions(status="Pending"):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""SELECT id, category, title, suggested_content, keywords, priority, reason,
+                 source_type, source_id, source_snapshot, status, created_at, updated_at
+                 FROM memory_suggestions WHERE status = ? ORDER BY priority DESC, id DESC""", (status,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def save_memory(category, title, content, keywords="", priority=5, active=1, source_type="manual", source_id=""):
+    now = now_iso()
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""INSERT INTO app_memories
+                 (category, title, content, keywords, priority, active, source_type, source_id, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+              (category, title, redact_sensitive(content), redact_sensitive(keywords), int(priority), int(active), source_type, str(source_id or ""), now, now))
+    memory_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+    return memory_id
+
+def update_memory(memory_id, category, title, content, keywords, priority, active):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""UPDATE app_memories SET category=?, title=?, content=?, keywords=?, priority=?,
+                 active=?, updated_at=? WHERE id=?""",
+              (category, title, redact_sensitive(content), redact_sensitive(keywords), int(priority), int(active), now_iso(), memory_id))
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+
+def set_memory_active(memory_id, active):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE app_memories SET active=?, updated_at=? WHERE id=?", (int(active), now_iso(), memory_id))
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+
+def delete_memory(memory_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM app_memories WHERE id=?", (memory_id,))
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+
+def save_memory_suggestion(category, title, content, keywords="", priority=5, reason="", source_type="", source_id="", source_snapshot=""):
+    now = now_iso()
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""INSERT INTO memory_suggestions
+                 (category, title, suggested_content, keywords, priority, reason, source_type,
+                  source_id, source_snapshot, status, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)""",
+              (category, title, redact_sensitive(content), redact_sensitive(keywords), int(priority), reason,
+               source_type, str(source_id or ""), compact_text(redact_sensitive(source_snapshot), 2500), now, now))
+    suggestion_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+    return suggestion_id
+
+def approve_memory_suggestion(suggestion_id):
+    rows = [row for row in list_memory_suggestions("Pending") if row[0] == suggestion_id]
+    if not rows:
+        return
+    _, category, title, content, keywords, priority, _, source_type, source_id, _, _, _, _ = rows[0]
+    save_memory(category, title, content, keywords, priority, 1, source_type or "suggestion", source_id)
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE memory_suggestions SET status='Approved', updated_at=? WHERE id=?", (now_iso(), suggestion_id))
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+
+def reject_memory_suggestion(suggestion_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE memory_suggestions SET status='Rejected', updated_at=? WHERE id=?", (now_iso(), suggestion_id))
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+
+def list_skills(include_inactive=True):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    query = """SELECT id, name, trigger_keywords, goal, steps, examples, validation_rules,
+               priority, active, version, created_at, updated_at FROM app_skills"""
+    if not include_inactive:
+        query += " WHERE active = 1"
+    query += " ORDER BY active DESC, priority DESC, updated_at DESC, id DESC"
+    c.execute(query)
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def save_skill(name, trigger_keywords, goal, steps, examples="", validation_rules="", priority=5, active=1, version=1):
+    now = now_iso()
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""INSERT INTO app_skills
+                 (name, trigger_keywords, goal, steps, examples, validation_rules, priority, active, version, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+              (name, redact_sensitive(trigger_keywords), redact_sensitive(goal), redact_sensitive(steps),
+               redact_sensitive(examples), redact_sensitive(validation_rules), int(priority), int(active), int(version), now, now))
+    skill_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+    return skill_id
+
+def update_skill(skill_id, name, trigger_keywords, goal, steps, examples, validation_rules, priority, active, version):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""UPDATE app_skills SET name=?, trigger_keywords=?, goal=?, steps=?, examples=?,
+                 validation_rules=?, priority=?, active=?, version=?, updated_at=? WHERE id=?""",
+              (name, redact_sensitive(trigger_keywords), redact_sensitive(goal), redact_sensitive(steps),
+               redact_sensitive(examples), redact_sensitive(validation_rules), int(priority), int(active), int(version), now_iso(), skill_id))
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+
+def set_skill_active(skill_id, active):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE app_skills SET active=?, updated_at=? WHERE id=?", (int(active), now_iso(), skill_id))
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+
+def delete_skill(skill_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM app_skills WHERE id=?", (skill_id,))
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+
+def list_skill_suggestions(status="Pending"):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""SELECT id, name, trigger_keywords, goal, steps, examples, validation_rules,
+                 priority, reason, source_type, source_id, source_snapshot, status, created_at, updated_at
+                 FROM skill_suggestions WHERE status = ? ORDER BY priority DESC, id DESC""", (status,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def save_skill_suggestion(name, trigger_keywords, goal, steps, examples="", validation_rules="", priority=5, reason="", source_type="", source_id="", source_snapshot=""):
+    now = now_iso()
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""INSERT INTO skill_suggestions
+                 (name, trigger_keywords, goal, steps, examples, validation_rules, priority, reason,
+                  source_type, source_id, source_snapshot, status, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)""",
+              (name, redact_sensitive(trigger_keywords), redact_sensitive(goal), redact_sensitive(steps),
+               redact_sensitive(examples), redact_sensitive(validation_rules), int(priority), reason,
+               source_type, str(source_id or ""), compact_text(redact_sensitive(source_snapshot), 2500), now, now))
+    suggestion_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+    return suggestion_id
+
+def approve_skill_suggestion(suggestion_id):
+    rows = [row for row in list_skill_suggestions("Pending") if row[0] == suggestion_id]
+    if not rows:
+        return
+    _, name, trigger_keywords, goal, steps, examples, validation_rules, priority, *_ = rows[0]
+    save_skill(name, trigger_keywords, goal, steps, examples, validation_rules, priority, 1, 1)
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE skill_suggestions SET status='Approved', updated_at=? WHERE id=?", (now_iso(), suggestion_id))
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+
+def reject_skill_suggestion(suggestion_id):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("UPDATE skill_suggestions SET status='Rejected', updated_at=? WHERE id=?", (now_iso(), suggestion_id))
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+
+def get_relevant_memories(context, categories=None, limit=8):
+    wanted = set(categories or [])
+    candidates = []
+    for row in list_memories(include_inactive=False):
+        memory_id, category, title, content, keywords, priority, active, *_ = row
+        if wanted and category not in wanted and category != "general_workflow":
+            continue
+        score = learning_score(context, keywords, title, category, wanted, priority)
+        if score > 0:
+            candidates.append({"id": memory_id, "category": category, "title": title, "content": content, "keywords": keywords, "priority": priority, "score": score})
+    return sorted(candidates, key=lambda x: (x["score"], x["priority"], x["id"]), reverse=True)[:limit]
+
+def get_relevant_skills(context, workflow="", limit=3):
+    candidates = []
+    combined_context = f"{workflow} {context}"
+    for row in list_skills(include_inactive=False):
+        skill_id, name, trigger_keywords, goal, steps, examples, validation_rules, priority, active, version, *_ = row
+        score = learning_score(combined_context, trigger_keywords, name, "skill", None, priority)
+        if score > 0:
+            candidates.append({
+                "id": skill_id, "name": name, "trigger_keywords": trigger_keywords, "goal": goal,
+                "steps": steps, "examples": examples, "validation_rules": validation_rules,
+                "priority": priority, "version": version, "score": score
+            })
+    return sorted(candidates, key=lambda x: (x["score"], x["priority"], x["id"]), reverse=True)[:limit]
+
+def build_learning_prompt(memories, skills):
+    sections = []
+    if memories:
+        lines = ["Approved Memories:"]
+        for m in memories:
+            lines.append(f"- [{m['category']} | priority {m['priority']}] {m['title']}: {compact_text(m['content'], 700)}")
+        sections.append("\n".join(lines))
+    if skills:
+        lines = ["Approved Hermes-Style Process Skills:"]
+        for s in skills:
+            lines.append(
+                f"- Skill: {s['name']} v{s['version']} (priority {s['priority']})\n"
+                f"  Goal: {compact_text(s['goal'], 350)}\n"
+                f"  Steps: {compact_text(s['steps'], 700)}\n"
+                f"  Validation: {compact_text(s['validation_rules'], 350)}"
+            )
+        sections.append("\n".join(lines))
+    return "\n\n".join(sections)
+
+def get_learning_context(context, categories=None, workflow="", memory_limit=8, skill_limit=3):
+    try:
+        safe_context = redact_sensitive(compact_text(context, 3000))
+        memories = get_relevant_memories(safe_context, categories, memory_limit)
+        skills = get_relevant_skills(safe_context, workflow, skill_limit)
+        return {"memories": memories, "skills": skills, "prompt": build_learning_prompt(memories, skills)}
+    except Exception as e:
+        queue_warning(f"Learning memory retrieval failed: {e}")
+        return {"memories": [], "skills": [], "prompt": ""}
+
+def log_skill_runs(skills, workflow, context_summary="", outcome="used", source_id=""):
+    if not skills:
+        return
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    for skill in skills:
+        c.execute("""INSERT INTO skill_runs (skill_id, skill_name, workflow, context_summary, outcome, source_id, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                  (skill.get("id"), skill.get("name"), workflow, compact_text(redact_sensitive(context_summary), 900), outcome, str(source_id or ""), now_iso()))
+    conn.commit()
+    conn.close()
+    push_db_to_github()
+
+def list_skill_runs(limit=50):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""SELECT id, skill_name, workflow, context_summary, outcome, source_id, created_at
+                 FROM skill_runs ORDER BY id DESC LIMIT ?""", (limit,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+def seed_default_skills():
+    defaults = [
+        ("Chemical Purchase Nondh", "chemical, chemicals, reagent, laboratory, acid, solvent, acarology",
+         "Create a purchase Nondh for chemicals or laboratory consumables.",
+         "Identify item names, quantities, pack sizes, and unit prices. Use English table headers. Keep package size only in Available Pkt/Unit. Use Statute 121 precedent for research/lab materials.",
+         "Acetic Acid, Ethanol, laboratory reagents.",
+         "Total Price must equal Required Quantity x Unit/Pkt Price. Do not invent package units.", 8),
+        ("Equipment Purchase Nondh", "equipment, instrument, device, microscope, machine, repair, purchase",
+         "Create a purchase Nondh for equipment or instruments.",
+         "Clarify whether the item is new equipment or repair/maintenance. Choose statute precedent based on equipment category. Keep justification practical and formal.",
+         "Microscope accessories, lab instruments.",
+         "Do not classify consumables as equipment. Mention scheme/budget head consistently.", 7),
+        ("Statute 121 Item Matching", "statute, 121, item number, approval, sanction, precedent",
+         "Select the most defensible Statute 121 item number using sample precedent first.",
+         "Check sample Nondh precedent. If no match exists, use statute PDF context. Explain chosen item and reject a plausible wrong item.",
+         "Use exact item format like ૫૪ (i) when precedent supports it.",
+         "Never hallucinate item numbers. Always include justification and rejected alternative.", 10),
+        ("Invoice Total Extraction", "invoice, bill, total, payable, gst, net payable, grand total",
+         "Extract the final payable amount and bill number from uploaded invoices.",
+         "Prefer Grand Total, Invoice Total, Net Payable, or Total Amount including taxes. Compare against PO amount and return clean JSON.",
+         "Vendor bill PDF/image extraction.",
+         "Return pure numeric amount without commas. Do not choose subtotal when tax-inclusive total exists.", 8),
+        ("Bill Pasting Register Selection", "bill pasting, register, stock, consumable, deadstock, register page",
+         "Guide bill pasting register details and certificate wording.",
+         "Use consumable register for consumables, deadstock for durable equipment, and stock register where office stock entry is required.",
+         "Chemicals usually map to consumable usage; durable instruments often map to deadstock.",
+         "Do not auto-fill page numbers unless provided by the user.", 7),
+    ]
+    existing_names = {str(row[1]).lower() for row in list_skills(include_inactive=True)}
+    for name, keywords, goal, steps, examples, validation, priority in defaults:
+        if name.lower() not in existing_names:
+            save_skill(name, keywords, goal, steps, examples, validation, priority, 1, 1)
+
+def suggest_learning_from_nondh(api_key, original_doc, final_doc, subject, nondh_id):
+    if not api_key:
+        return 0
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+        prompt = f"""
+        You are helping improve a Gujarati administrative Streamlit app.
+        Compare the AI draft and final saved Nondh. Suggest reusable learning ONLY if it would help future workflows.
+        Do not include API keys, secrets, or personal credentials.
+
+        Return ONLY valid JSON:
+        {{
+          "memories": [
+            {{"category": "nondh_style", "title": "...", "content": "...", "keywords": "comma,list", "priority": 5, "reason": "..."}}
+          ],
+          "skills": [
+            {{"name": "...", "trigger_keywords": "comma,list", "goal": "...", "steps": "...", "examples": "...", "validation_rules": "...", "priority": 5, "reason": "..."}}
+          ]
+        }}
+
+        Allowed memory categories: {", ".join(LEARNING_CATEGORIES)}
+        Subject: {redact_sensitive(subject)}
+        AI draft:
+        {compact_text(redact_sensitive(original_doc), 5000)}
+
+        Final saved document:
+        {compact_text(redact_sensitive(final_doc), 5000)}
+        """
+        response = model.generate_content(prompt)
+        raw = response.text.strip().replace("```json", "").replace("```", "")
+        data = json.loads(raw)
+        saved = 0
+        snapshot = f"Subject: {subject}\nFinal: {compact_text(final_doc, 1800)}"
+        for item in data.get("memories", [])[:5]:
+            category = item.get("category", "general_workflow")
+            if category not in LEARNING_CATEGORIES:
+                category = "general_workflow"
+            save_memory_suggestion(
+                category, item.get("title", "Suggested memory"), item.get("content", ""),
+                item.get("keywords", ""), int(item.get("priority", 5)), item.get("reason", ""),
+                "nondh", nondh_id, snapshot
+            )
+            saved += 1
+        for item in data.get("skills", [])[:3]:
+            save_skill_suggestion(
+                item.get("name", "Suggested skill"), item.get("trigger_keywords", ""),
+                item.get("goal", ""), item.get("steps", ""), item.get("examples", ""),
+                item.get("validation_rules", ""), int(item.get("priority", 5)), item.get("reason", ""),
+                "nondh", nondh_id, snapshot
+            )
+            saved += 1
+        return saved
+    except Exception as e:
+        queue_warning(f"Learning suggestion generation failed: {e}")
+        return 0
+
 def delete_vault_record(vault_id, nondh_id, file_path):
     """વોલ્ટમાંથી ફાઈલ કાઢે છે, અને જો Nondh જોડાયેલી હોય તો તેને પણ કાઢીને GitHub પર સિન્ક કરે છે."""
     conn = sqlite3.connect(DB_FILE)
@@ -411,6 +857,11 @@ if "db_synced" not in st.session_state:
     st.session_state.db_synced = True
 
 init_db()
+try:
+    seed_default_skills()
+except Exception as e:
+    queue_warning(f"Default skill seeding failed: {e}")
+
 def get_recent_nondhs(days=30):
     """છેલ્લા 30 દિવસની સાદર નોંધ મેળવવા માટે"""
     conn = sqlite3.connect(DB_FILE)
@@ -1345,7 +1796,12 @@ with tab1:
             with st.spinner("સ્ટેચ્યુટ ૧૨૧ ની ચકાસણી અને નોંધ તૈયાર કરવામાં આવી રહી છે..."):
                 try:
                     statute_context, sample_context = load_permanent_context()
-                    
+                    learning = get_learning_context(
+                        text_prompt or "",
+                        ["nondh_style", "statute_precedent", "item_mapping", "budget_default", "general_workflow"],
+                        "nondh_generation"
+                    )
+
                     genai.configure(api_key=api_key)
                     model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
                     
@@ -1357,6 +1813,10 @@ with tab1:
                     {statute_context[:15000]}
                     {sample_context}
                     [CONTEXT END]
+
+                    [APPROVED LEARNING MEMORY AND HERMES-STYLE SKILLS]
+                    {learning['prompt'] if learning['prompt'] else 'No approved memories or skills matched this request.'}
+                    [END APPROVED LEARNING]
 
                     Format REQUIRED:
                     તા. {datetime.date.today().strftime('%d/%m/%Y')}
@@ -1418,7 +1878,9 @@ with tab1:
                     else:
                         st.session_state['generated_nondh'] = res_text.strip()
                         st.session_state['statute_analysis'] = ""
-                        
+                    st.session_state['last_learning_context'] = learning
+                    log_skill_runs(learning["skills"], "nondh_generation", text_prompt or "", "used")
+
                     st.success("સાદર નોંધ સફળતાપૂર્વક તૈયાર થઈ ગઈ છે!")
                     
                 except Exception as e:
@@ -1431,7 +1893,17 @@ with tab1:
             with st.expander("🔍 Statute 121 Analysis & Justification (AI Reasoning)", expanded=True):
                 st.info("આ વિભાગ ફક્ત તમારી જાણકારી માટે છે અને વર્ડ ડોક્યુમેન્ટ (DOCX) માં પ્રિન્ટ થશે નહીં.")
                 st.markdown(st.session_state['statute_analysis'])
-        
+
+        learning_trace = st.session_state.get('last_learning_context', {})
+        if learning_trace and (learning_trace.get("memories") or learning_trace.get("skills")):
+            with st.expander("🧠 Learning Memory & Hermes Skills Used", expanded=False):
+                for memory in learning_trace.get("memories", []):
+                    st.markdown(f"**Memory #{memory['id']} ({memory['category']})**: {memory['title']}")
+                    st.caption(compact_text(memory['content'], 500))
+                for skill in learning_trace.get("skills", []):
+                    st.markdown(f"**Skill #{skill['id']}**: {skill['name']} v{skill['version']}")
+                    st.caption(compact_text(skill['goal'], 500))
+
         st.markdown("---")
         st.markdown("### ડ્રાફ્ટ એડિટિંગ (Smart Editor)")
         
@@ -1510,6 +1982,16 @@ with tab1:
                 # Automatically save the DOCX to the vault linked to this new Nondh
                 docx_data = create_docx(final_document)
                 save_file_to_vault(docx_data, f"Nondh_{nondh_id}_{datetime.date.today().strftime('%d_%m')}.docx", "Sadar Nondh Draft", nondh_id=nondh_id)
+                with st.spinner("Creating learning suggestions from this completed Nondh..."):
+                    suggestion_count = suggest_learning_from_nondh(
+                        api_key,
+                        st.session_state.get('generated_nondh', ''),
+                        final_document,
+                        subj,
+                        nondh_id
+                    )
+                if suggestion_count:
+                    st.info(f"{suggestion_count} learning suggestion(s) were added to Tab 6 for approval.")
                 st.success("નોંધ અને ડ્રાફ્ટ સાચવી લેવામાં આવ્યા છે! (હવે તમે Tab 3 માં જઈ શકો છો)")
                 
         with col_down:
@@ -1549,6 +2031,7 @@ with tab2:
     def smart_search_gemini(query, records):
         if not query.strip(): return records
         if not api_key: return records
+        learning = get_learning_context(query, ["nondh_style", "item_mapping", "general_workflow"], "archive_search")
 
         # Using a fast model for search
         genai.configure(api_key=api_key)
@@ -1582,12 +2065,16 @@ with tab2:
         
         Records Data:
         {records_context}
-        
-        Return ONLY a comma-separated list of matching IDs (e.g., 0,2,5). 
+
+        Approved app memory/skills that may help search:
+        {learning['prompt'] if learning['prompt'] else 'None'}
+
+        Return ONLY a comma-separated list of matching IDs (e.g., 0,2,5).
         If absolutely no records match the meaning, return the exact word: NONE
         """
-        
+
         try:
+            log_skill_runs(learning["skills"], "archive_search", query, "used")
             response = model.generate_content(prompt)
             result = response.text.strip()
             
@@ -1809,10 +2296,18 @@ with tab4:
                                 import json
                                 import re  # ટેક્સ્ટ સાફ કરવા માટે
                                 genai.configure(api_key=api_key)
-                                model = genai.GenerativeModel('gemini-3.1-pro-preview') 
-                                
+                                model = genai.GenerativeModel('gemini-3.1-pro-preview')
+                                learning = get_learning_context(
+                                    f"{v_name} {o_no} {amt} {invoice_upload.name}",
+                                    ["invoice_extraction", "bill_payment", "vendor_default", "general_workflow"],
+                                    "invoice_extraction"
+                                )
+
                                 prompt = f"""
                                 You are an intelligent accounting AI. The approved Purchase Order (PO) amount for this transaction is ₹{amt}.
+                                Approved memories and Hermes-style skills:
+                                {learning['prompt'] if learning['prompt'] else 'None'}
+
                                 Carefully analyze the uploaded invoice and extract the following:
                                 
                                 1. Invoice/Bill Number.
@@ -1826,9 +2321,11 @@ with tab4:
                                 # --- મોટો સુધારો: PyPDF2 કાઢીને PDF સીધી જ Gemini ને આપો ---
                                 if invoice_upload.type == "application/pdf":
                                     doc_parts = [{"mime_type": "application/pdf", "data": invoice_upload.getvalue()}]
+                                    log_skill_runs(learning["skills"], "invoice_extraction", invoice_upload.name, "used")
                                     response = model.generate_content([prompt, doc_parts[0]])
                                 else:
                                     img = Image.open(invoice_upload)
+                                    log_skill_runs(learning["skills"], "invoice_extraction", invoice_upload.name, "used")
                                     response = model.generate_content([prompt, img])
                                 
                                 res_text = response.text.strip().replace("```json", "").replace("```", "")
@@ -1862,7 +2359,12 @@ with tab4:
                                 try:
                                     genai.configure(api_key=api_key)
                                     model = genai.GenerativeModel('gemini-3.1-pro-preview')
-                                    prompt = f"Convert the number {final_amt} into English words (capitalize the first letter of each word). Return ONLY the text, nothing else. Example: for 3956.50 return 'Three Thousand Nine Hundred Fifty Six And Fifty Paise'."
+                                    learning = get_learning_context(str(final_amt), ["bill_payment", "general_workflow"], "amount_words_english")
+                                    prompt = f"""Convert the number {final_amt} into English words (capitalize the first letter of each word).
+Approved memories and Hermes-style skills:
+{learning['prompt'] if learning['prompt'] else 'None'}
+Return ONLY the text, nothing else. Example: for 3956.50 return 'Three Thousand Nine Hundred Fifty Six And Fifty Paise'."""
+                                    log_skill_runs(learning["skills"], "amount_words_english", str(final_amt), "used")
                                     res = model.generate_content(prompt)
                                     st.session_state.ext_words = res.text.strip()
                                     st.rerun()
@@ -1933,18 +2435,30 @@ with tab5:
                 
                 # --- બટન વગર આપોઆપ ગુજરાતી અનુવાદ (Auto-Translate) ---
                 @st.cache_data(show_spinner=False)
-                def get_gujarati_words_auto(amount, key):
+                def get_gujarati_words_auto(amount, key, learning_prompt=""):
                     if not key or amount == 0: return ""
                     try:
                         genai.configure(api_key=key)
                         model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
-                        prompt = f"Translate the number {amount} into Gujarati words. Return ONLY the Gujarati translation. Example: for 3956 return 'ત્રણ હજાર નવસો છપ્પન'."
+                        prompt = f"""Translate the number {amount} into Gujarati words.
+Approved memories and Hermes-style skills:
+{learning_prompt if learning_prompt else 'None'}
+Return ONLY the Gujarati translation. Example: for 3956 return 'ત્રણ હજાર નવસો છપ્પન'."""
                         res = model.generate_content(prompt)
                         return res.text.strip()
                     except:
                         return ""
-                
-                auto_gujarati_text = get_gujarati_words_auto(final_amt_pst, api_key)
+
+                learning_t5 = get_learning_context(
+                    f"{party_name_pst} {final_amt_pst}",
+                    ["bill_pasting", "register_rule", "bill_payment", "general_workflow"],
+                    "amount_words_gujarati"
+                )
+                skill_log_key = f"guj_skill_logged_{po_id_t5}_{final_amt_pst}"
+                if not st.session_state.get(skill_log_key):
+                    log_skill_runs(learning_t5["skills"], "amount_words_gujarati", str(final_amt_pst), "used")
+                    st.session_state[skill_log_key] = True
+                auto_gujarati_text = get_gujarati_words_auto(final_amt_pst, api_key, learning_t5["prompt"])
                 amt_words_guj = st.text_input("રકમ શબ્દોમાં (ગુજરાતીમાં)", value=auto_gujarati_text, placeholder="દા.ત., ત્રણ હજાર નવસો છપ્પન")
                             
             st.markdown("#### 📝 મંજુરીની વિગતો (Approval Details - મુદ્દા નં. ૧)")
@@ -1995,7 +2509,187 @@ with tab5:
 # --- TAB 6 (DIGITAL VAULT & PAYMENT CLOSURE) ---
 with tab6:
     st.markdown("### 🗄️ ડિજિટલ વોલ્ટ અને પેમેન્ટ ક્લોઝર (Vault & Payment Closure)")
-    
+
+    with st.expander("🧠 Learning Memory & Hermes-Style Skills", expanded=False):
+        mem_tab, mem_sug_tab, skill_tab, skill_sug_tab, run_tab = st.tabs([
+            "Approved Memories", "Memory Suggestions", "Approved Skills", "Skill Suggestions", "Skill Runs"
+        ])
+
+        with mem_tab:
+            st.markdown("#### Add Memory")
+            with st.form("add_memory_form"):
+                m_col1, m_col2, m_col3 = st.columns([2, 3, 1])
+                with m_col1:
+                    new_mem_category = st.selectbox("Category", LEARNING_CATEGORIES, key="new_mem_category")
+                    new_mem_priority = st.number_input("Priority", min_value=1, max_value=10, value=5, step=1, key="new_mem_priority")
+                with m_col2:
+                    new_mem_title = st.text_input("Title", key="new_mem_title")
+                    new_mem_keywords = st.text_input("Keywords", key="new_mem_keywords")
+                with m_col3:
+                    new_mem_active = st.checkbox("Active", value=True, key="new_mem_active")
+                new_mem_content = st.text_area("Memory Content", key="new_mem_content", height=120)
+                if st.form_submit_button("Save Memory"):
+                    if not new_mem_title.strip() or not new_mem_content.strip():
+                        st.error("Memory title and content are required.")
+                    else:
+                        save_memory(new_mem_category, new_mem_title, new_mem_content, new_mem_keywords, new_mem_priority, int(new_mem_active), "manual", "")
+                        st.success("Memory saved.")
+                        st.rerun()
+
+            st.markdown("#### Existing Memories")
+            memories = list_memories(include_inactive=True)
+            if not memories:
+                st.info("No memories saved yet.")
+            for memory in memories:
+                mem_id, category, title, content, keywords, priority, active, source_type, source_id, created_at, updated_at = memory
+                status = "Active" if active else "Inactive"
+                with st.expander(f"#{mem_id} [{status}] {title}", expanded=False):
+                    e_col1, e_col2 = st.columns([1, 2])
+                    with e_col1:
+                        edit_category = st.selectbox("Category", LEARNING_CATEGORIES, index=LEARNING_CATEGORIES.index(category) if category in LEARNING_CATEGORIES else 0, key=f"mem_cat_{mem_id}")
+                        edit_priority = st.number_input("Priority", min_value=1, max_value=10, value=int(priority or 5), step=1, key=f"mem_pri_{mem_id}")
+                        edit_active = st.checkbox("Active", value=bool(active), key=f"mem_act_{mem_id}")
+                    with e_col2:
+                        edit_title = st.text_input("Title", value=title or "", key=f"mem_title_{mem_id}")
+                        edit_keywords = st.text_input("Keywords", value=keywords or "", key=f"mem_kw_{mem_id}")
+                    edit_content = st.text_area("Content", value=content or "", height=120, key=f"mem_content_{mem_id}")
+                    st.caption(f"Source: {source_type or '-'} {source_id or ''} | Updated: {updated_at or '-'}")
+                    b1, b2, b3 = st.columns(3)
+                    with b1:
+                        if st.button("Update", key=f"mem_update_{mem_id}"):
+                            update_memory(mem_id, edit_category, edit_title, edit_content, edit_keywords, edit_priority, int(edit_active))
+                            st.success("Memory updated.")
+                            st.rerun()
+                    with b2:
+                        if st.button("Deactivate" if active else "Activate", key=f"mem_toggle_{mem_id}"):
+                            set_memory_active(mem_id, 0 if active else 1)
+                            st.rerun()
+                    with b3:
+                        if st.button("Delete", key=f"mem_delete_{mem_id}"):
+                            delete_memory(mem_id)
+                            st.warning("Memory deleted.")
+                            st.rerun()
+
+        with mem_sug_tab:
+            suggestions = list_memory_suggestions("Pending")
+            if not suggestions:
+                st.info("No pending memory suggestions.")
+            for suggestion in suggestions:
+                sug_id, category, title, content, keywords, priority, reason, source_type, source_id, source_snapshot, status, created_at, updated_at = suggestion
+                with st.expander(f"Suggestion #{sug_id}: {title}", expanded=False):
+                    st.caption(f"Category: {category} | Priority: {priority} | Source: {source_type} {source_id}")
+                    st.write(reason or "No reason provided.")
+                    st.markdown(content)
+                    st.caption(f"Keywords: {keywords}")
+                    with st.expander("Source Snapshot", expanded=False):
+                        st.text(source_snapshot or "")
+                    a_col, r_col = st.columns(2)
+                    with a_col:
+                        if st.button("Approve Memory", key=f"approve_mem_sug_{sug_id}"):
+                            approve_memory_suggestion(sug_id)
+                            st.success("Memory approved.")
+                            st.rerun()
+                    with r_col:
+                        if st.button("Reject", key=f"reject_mem_sug_{sug_id}"):
+                            reject_memory_suggestion(sug_id)
+                            st.warning("Memory suggestion rejected.")
+                            st.rerun()
+
+        with skill_tab:
+            st.markdown("#### Add Hermes-Style Skill")
+            with st.form("add_skill_form"):
+                s_col1, s_col2 = st.columns([2, 1])
+                with s_col1:
+                    new_skill_name = st.text_input("Skill Name", key="new_skill_name")
+                    new_skill_keywords = st.text_input("Trigger Keywords", key="new_skill_keywords")
+                with s_col2:
+                    new_skill_priority = st.number_input("Priority", min_value=1, max_value=10, value=5, step=1, key="new_skill_priority")
+                    new_skill_active = st.checkbox("Active", value=True, key="new_skill_active")
+                new_skill_goal = st.text_area("Goal", key="new_skill_goal", height=80)
+                new_skill_steps = st.text_area("Steps", key="new_skill_steps", height=120)
+                new_skill_examples = st.text_area("Examples", key="new_skill_examples", height=80)
+                new_skill_validation = st.text_area("Validation Rules", key="new_skill_validation", height=80)
+                if st.form_submit_button("Save Skill"):
+                    if not new_skill_name.strip() or not new_skill_goal.strip() or not new_skill_steps.strip():
+                        st.error("Skill name, goal, and steps are required.")
+                    else:
+                        save_skill(new_skill_name, new_skill_keywords, new_skill_goal, new_skill_steps, new_skill_examples, new_skill_validation, new_skill_priority, int(new_skill_active), 1)
+                        st.success("Skill saved.")
+                        st.rerun()
+
+            st.markdown("#### Existing Skills")
+            skills = list_skills(include_inactive=True)
+            if not skills:
+                st.info("No skills saved yet.")
+            for skill in skills:
+                skill_id, name, trigger_keywords, goal, steps, examples, validation_rules, priority, active, version, created_at, updated_at = skill
+                status = "Active" if active else "Inactive"
+                with st.expander(f"#{skill_id} [{status}] {name} v{version}", expanded=False):
+                    sk_col1, sk_col2 = st.columns([2, 1])
+                    with sk_col1:
+                        edit_name = st.text_input("Name", value=name or "", key=f"skill_name_{skill_id}")
+                        edit_keywords = st.text_input("Trigger Keywords", value=trigger_keywords or "", key=f"skill_kw_{skill_id}")
+                    with sk_col2:
+                        edit_priority = st.number_input("Priority", min_value=1, max_value=10, value=int(priority or 5), step=1, key=f"skill_pri_{skill_id}")
+                        edit_version = st.number_input("Version", min_value=1, value=int(version or 1), step=1, key=f"skill_ver_{skill_id}")
+                        edit_active = st.checkbox("Active", value=bool(active), key=f"skill_act_{skill_id}")
+                    edit_goal = st.text_area("Goal", value=goal or "", height=80, key=f"skill_goal_{skill_id}")
+                    edit_steps = st.text_area("Steps", value=steps or "", height=120, key=f"skill_steps_{skill_id}")
+                    edit_examples = st.text_area("Examples", value=examples or "", height=80, key=f"skill_examples_{skill_id}")
+                    edit_validation = st.text_area("Validation Rules", value=validation_rules or "", height=80, key=f"skill_validation_{skill_id}")
+                    st.caption(f"Updated: {updated_at or '-'}")
+                    b1, b2, b3 = st.columns(3)
+                    with b1:
+                        if st.button("Update Skill", key=f"skill_update_{skill_id}"):
+                            update_skill(skill_id, edit_name, edit_keywords, edit_goal, edit_steps, edit_examples, edit_validation, edit_priority, int(edit_active), edit_version)
+                            st.success("Skill updated.")
+                            st.rerun()
+                    with b2:
+                        if st.button("Deactivate" if active else "Activate", key=f"skill_toggle_{skill_id}"):
+                            set_skill_active(skill_id, 0 if active else 1)
+                            st.rerun()
+                    with b3:
+                        if st.button("Delete Skill", key=f"skill_delete_{skill_id}"):
+                            delete_skill(skill_id)
+                            st.warning("Skill deleted.")
+                            st.rerun()
+
+        with skill_sug_tab:
+            suggestions = list_skill_suggestions("Pending")
+            if not suggestions:
+                st.info("No pending skill suggestions.")
+            for suggestion in suggestions:
+                sug_id, name, trigger_keywords, goal, steps, examples, validation_rules, priority, reason, source_type, source_id, source_snapshot, status, created_at, updated_at = suggestion
+                with st.expander(f"Skill Suggestion #{sug_id}: {name}", expanded=False):
+                    st.caption(f"Priority: {priority} | Source: {source_type} {source_id}")
+                    st.write(reason or "No reason provided.")
+                    st.markdown(f"**Goal:** {goal}")
+                    st.markdown(f"**Steps:** {steps}")
+                    st.markdown(f"**Validation:** {validation_rules}")
+                    st.caption(f"Triggers: {trigger_keywords}")
+                    with st.expander("Examples / Source", expanded=False):
+                        st.text(f"{examples or ''}\n\n{source_snapshot or ''}")
+                    a_col, r_col = st.columns(2)
+                    with a_col:
+                        if st.button("Approve Skill", key=f"approve_skill_sug_{sug_id}"):
+                            approve_skill_suggestion(sug_id)
+                            st.success("Skill approved.")
+                            st.rerun()
+                    with r_col:
+                        if st.button("Reject", key=f"reject_skill_sug_{sug_id}"):
+                            reject_skill_suggestion(sug_id)
+                            st.warning("Skill suggestion rejected.")
+                            st.rerun()
+
+        with run_tab:
+            runs = list_skill_runs(75)
+            if not runs:
+                st.info("No skill run history yet.")
+            else:
+                for run_id, skill_name, workflow, context_summary, outcome, source_id, created_at in runs:
+                    st.markdown(f"**#{run_id} {skill_name}** | {workflow} | {outcome}")
+                    st.caption(f"{created_at} | Source: {source_id or '-'} | {context_summary}")
+
     # Section A: Mark as Paid
     with st.expander("✅ બાકી પેમેન્ટ ક્લિયર કરો (Pending Payments to Mark as Paid)", expanded=False):
         pending_pos = get_unfinished_pos(('Unfinished', 'Payment_Generated'))
