@@ -33,16 +33,38 @@ from github import Github
 # ==========================================
 # GitHub Cloud Sync Engine
 # ==========================================
+def get_secret_value(*names):
+    for name in names:
+        try:
+            value = st.secrets.get(name)
+        except Exception:
+            value = None
+        if value:
+            return str(value).strip()
+    return ""
+
+def queue_warning(message):
+    print(message)
+    try:
+        if st.session_state.get("_ui_ready"):
+            st.warning(message)
+        else:
+            warnings = st.session_state.setdefault("_startup_warnings", [])
+            if message not in warnings:
+                warnings.append(message)
+    except Exception:
+        pass
+
 def get_github_repo():
-    token = st.secrets.get("GITHUB_TOKEN")
-    repo_name = st.secrets.get("REPO_NAME", "vkcvaibhav/Nodh-maker-")
+    token = get_secret_value("GITHUB_TOKEN")
+    repo_name = get_secret_value("REPO_NAME") or "vkcvaibhav/Nodh-maker-"
     if not token:
         return None
     try:
         g = Github(token)
         return g.get_repo(repo_name)
     except Exception as e:
-        print(f"GitHub Auth Error: {e}")
+        queue_warning(f"GitHub auth failed: {e}")
         return None
 
 def pull_db_from_github():
@@ -55,13 +77,14 @@ def pull_db_from_github():
         with open(DB_FILE, "wb") as f:
             f.write(file_content.decoded_content)
         print("Database successfully pulled from GitHub!")
-    except Exception:
-        print("No existing DB found on GitHub. A new one will be created.")
+    except Exception as e:
+        queue_warning(f"GitHub DB pull skipped or failed: {e}")
 
 def push_db_to_github():
     """Uploads the local DB to GitHub after any changes."""
     repo = get_github_repo()
-    if not repo: return
+    if not repo:
+        return False
     try:
         with open(DB_FILE, "rb") as f:
             content = f.read()
@@ -69,20 +92,31 @@ def push_db_to_github():
             # Update existing file
             contents = repo.get_contents(f"data/{DB_FILE}")
             repo.update_file(contents.path, f"Auto-backup DB {datetime.datetime.now()}", content, contents.sha)
-        except:
+        except Exception:
             # Create new file if it doesn't exist
             repo.create_file(f"data/{DB_FILE}", "Initial DB backup", content)
+        return True
     except Exception as e:
-        print(f"Failed to push DB to GitHub: {e}")
+        queue_warning(f"Failed to push DB to GitHub: {e}")
+        return False
 
 def push_file_to_github(file_bytes, github_path):
     """Uploads documents/PDFs to the GitHub repo."""
     repo = get_github_repo()
-    if not repo: return
+    if not repo:
+        return False
+    content = bytes(file_bytes)
     try:
-        repo.create_file(github_path, f"Uploaded {github_path}", file_bytes)
+        try:
+            existing = repo.get_contents(github_path)
+            repo.update_file(existing.path, f"Updated {github_path}", content, existing.sha)
+        except Exception:
+            repo.create_file(github_path, f"Uploaded {github_path}", content)
+        return True
     except Exception as e:
-        print(f"Failed to push file to GitHub: {e}")
+        queue_warning(f"Failed to push file to GitHub: {e}")
+        return False
+
 def pull_file_from_github(github_path):
     """Downloads a missing document back from GitHub repository."""
     repo = get_github_repo()
@@ -91,7 +125,7 @@ def pull_file_from_github(github_path):
         file_content = repo.get_contents(github_path)
         return file_content.decoded_content
     except Exception as e:
-        print(f"Failed to pull file from GitHub: {e}")
+        queue_warning(f"Failed to pull file from GitHub: {e}")
         return None
 
 def load_vault_file_bytes(file_path):
@@ -109,8 +143,8 @@ def load_vault_file_bytes(file_path):
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
                 with open(file_path, "wb") as f:
                     f.write(file_bytes)
-            except Exception:
-                pass
+            except Exception as e:
+                queue_warning(f"Could not cache pulled vault file locally: {e}")
             return file_bytes
     return None
 # ==========================================
@@ -197,8 +231,21 @@ def save_to_db(subject, content):
     push_db_to_github()
     return nondh_id
 
+def get_po_for_nondh(nondh_id):
+    if not nondh_id:
+        return None
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id, status FROM purchase_orders WHERE nondh_id = ? ORDER BY id DESC LIMIT 1", (nondh_id,))
+    po = c.fetchone()
+    conn.close()
+    return po
+
 def save_po_to_db(nondh_id, vendor_name, out_no, date, amount):
     amount = coerce_amount(amount)
+    existing_po = get_po_for_nondh(nondh_id)
+    if existing_po:
+        return existing_po[0]
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("INSERT INTO purchase_orders (nondh_id, vendor_name, out_no, date, amount, status) VALUES (?, ?, ?, ?, ?, 'Unfinished')", 
@@ -391,6 +438,7 @@ def delete_nondh(nondh_id):
     c.execute("DELETE FROM archive WHERE id = ?", (nondh_id,))
     conn.commit()
     conn.close()
+    push_db_to_github()
 init_db()
 
 # ==========================================
@@ -1255,7 +1303,20 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
 st.set_page_config(page_title="સાદર નોંધ જનરેટર", layout="wide")
 st.title("સાદર નોંધ જનરેટર (Intelligent Sadar Nondh App)")
 
-api_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
+st.session_state["_ui_ready"] = True
+for warning_message in st.session_state.pop("_startup_warnings", []):
+    st.sidebar.warning(warning_message)
+
+api_key = get_secret_value(
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "GOOGLE_GENERATIVE_AI_API_KEY",
+)
+
+if api_key:
+    st.sidebar.success("Gemini API key loaded from Streamlit secrets.")
+else:
+    st.sidebar.warning('Gemini API key missing. Add GEMINI_API_KEY in Streamlit secrets.')
 
 # --- ADDED TAB 6 ---
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
@@ -1277,7 +1338,7 @@ with tab1:
     
     if st.button("જનરેટ કરો (Generate)"):
         if not api_key:
-            st.error("Please enter your Gemini API Key in the sidebar.")
+            st.error("Please add GEMINI_API_KEY in Streamlit secrets.")
         elif not text_prompt and not uploaded_image:
             st.warning("Please provide either a text requirement or a PDF/image.")
         else:
@@ -1469,10 +1530,14 @@ with tab1:
                     with col_del1:
                         st.write(f"**ID: {n_id}** | 🗓️ {n_date} | 📝 {n_subj}")
                     with col_del2:
+                        confirm_delete_nondh = st.checkbox("Confirm", key=f"confirm_del_nondh_{n_id}")
                         if st.button("🗑️ Delete", key=f"del_nondh_{n_id}", type="secondary"):
-                            delete_nondh(n_id)
-                            st.error(f"નોંધ ID {n_id} સફળતાપૂર્વક રદ કરવામાં આવી છે!")
-                            st.rerun()
+                            if not confirm_delete_nondh:
+                                st.warning("Please tick Confirm before deleting this Nondh.")
+                            else:
+                                delete_nondh(n_id)
+                                st.error(f"નોંધ ID {n_id} સફળતાપૂર્વક રદ કરવામાં આવી છે!")
+                                st.rerun()
 
 with tab2:
     st.markdown("### 🗄️ જૂના રેકોર્ડ શોધો (Archive Search)")
@@ -1483,8 +1548,10 @@ with tab2:
 
     def smart_search_gemini(query, records):
         if not query.strip(): return records
-        
+        if not api_key: return records
+
         # Using a fast model for search
+        genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-3.1-pro-preview')
         
         records_context = ""
@@ -1638,7 +1705,7 @@ with tab3:
     # ડાઉનલોડ બટન અને ડેટાબેઝ સેવ કરવાનું નવું લોજીક
     if vendor_name and not po_df.empty:
         formatted_date = po_date.strftime("%d.%m.%Y")
-        grand_total = pd.to_numeric(po_df['Total Price'], errors='coerce').fillna(0).sum()
+        grand_total = coerce_amount(pd.to_numeric(po_df['Total Price'], errors='coerce').fillna(0).sum())
         
         current_nondh_id = None
         if selected_nondh != "-- જાતે માહિતી ભરો (Manual Entry) --":
@@ -1665,9 +1732,18 @@ with tab3:
 
         with col_btn2:
             if st.button("૨. ➡️ પેમેન્ટ માટે આગળ મોકલો (Step 2: Send to Tab 4)", type="primary"):
-                save_po_to_db(current_nondh_id, vendor_name, outward_no, formatted_date, grand_total)
-                st.success("ઓર્ડર સફળતાપૂર્વક Tab 4 (Bill Payment) માં મોકલી દેવાયો છે!")
-                st.rerun()
+                if not vendor_name.strip():
+                    st.error("Please enter the vendor name before sending this PO to payment.")
+                elif not str(outward_no).strip():
+                    st.error("Please enter the outward number before sending this PO to payment.")
+                elif grand_total <= 0:
+                    st.error("PO total must be greater than zero before sending this PO to payment.")
+                elif current_nondh_id and get_po_for_nondh(current_nondh_id):
+                    st.warning("A PO already exists for this Nondh. It was not added again.")
+                else:
+                    save_po_to_db(current_nondh_id, vendor_name, outward_no, formatted_date, grand_total)
+                    st.success("ઓર્ડર સફળતાપૂર્વક Tab 4 (Bill Payment) માં મોકલી દેવાયો છે!")
+                    st.rerun()
 # --- TAB 4 (Bill Payment ONLY) ---
 with tab4:
     st.markdown("### 💳 બિલ પેમેન્ટ ફોર્મ (Bill Payment Form)")
@@ -1939,10 +2015,14 @@ with tab6:
                         st.rerun()
                 with col_pay3:
                     st.write("")
+                    confirm_delete_po = st.checkbox("Confirm delete", key=f"confirm_delete_po_{po_data[0]}")
                     if st.button("🗑️ Delete Entry Forever"):
-                        delete_po(po_data[0])
-                        st.error("ઓર્ડર કાયમ માટે રદ કરવામાં આવ્યો છે!")
-                        st.rerun()
+                        if not confirm_delete_po:
+                            st.warning("Please tick Confirm delete before deleting this payment entry.")
+                        else:
+                            delete_po(po_data[0])
+                            st.error("ઓર્ડર કાયમ માટે રદ કરવામાં આવ્યો છે!")
+                            st.rerun()
 
     # --- NEW SECTION: Upload Physical Signed Documents ---
     st.markdown("---")
@@ -2054,15 +2134,19 @@ with tab6:
                                 st.error("File missing completely")
                                 
                         with col_btn2:
+                            confirm_delete_vault = st.checkbox("Confirm", key=f"confirm_delete_vault_{v_id}")
                             if st.button("🗑️ Delete", key=f"del_vault_{v_id}"):
-                                conn = sqlite3.connect(DB_FILE)
-                                c = conn.cursor()
-                                c.execute("DELETE FROM digital_vault WHERE id = ?", (v_id,))
-                                conn.commit()
-                                conn.close()
-                                push_db_to_github()
-                                if os.path.exists(f_path):
-                                    try: os.remove(f_path)
-                                    except: pass
-                                st.error(f"ફાઈલ '{f_name}' રદ કરવામાં આવી છે!")
-                                st.rerun()
+                                if not confirm_delete_vault:
+                                    st.warning("Please tick Confirm before deleting this vault file.")
+                                else:
+                                    conn = sqlite3.connect(DB_FILE)
+                                    c = conn.cursor()
+                                    c.execute("DELETE FROM digital_vault WHERE id = ?", (v_id,))
+                                    conn.commit()
+                                    conn.close()
+                                    push_db_to_github()
+                                    if os.path.exists(f_path):
+                                        try: os.remove(f_path)
+                                        except: pass
+                                    st.error(f"ફાઈલ '{f_name}' રદ કરવામાં આવી છે!")
+                                    st.rerun()
