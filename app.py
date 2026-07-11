@@ -1454,7 +1454,7 @@ def create_docx(content):
                 p = doc.add_paragraph()
                 p.add_run(line_stripped).bold = True
                 p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-            elif any(role in line_stripped for role in ["અધિકારી", "ઈન્ચાર્જ", "પ્રાધ્યાપક", "વડા"]) and not any(r in line_stripped for r in ["આચાર્ય", "ડીનશ્રી"]):
+            elif len(line_stripped) < 60 and any(role in line_stripped for role in ["અધિકારી", "ઈન્ચાર્જ", "પ્રાધ્યાપક", "વડા"]) and not any(r in line_stripped for r in ["આચાર્ય", "ડીનશ્રી"]):
                 sig_buffer.append(line_stripped)
             elif any(role in line_stripped for role in ["આચાર્ય", "ડીનશ્રી", "મહાવિધાયલય", "ન.કૃ.યુ"]):
                 flush_signatures()
@@ -2259,12 +2259,29 @@ Approved memories and Hermes-style skills:
 
 with tab1:
     st.markdown("### જરૂરિયાતની વિગત આપો (Provide Requirements)")
+
+    nondh_type = st.radio(
+        "નોંધનો પ્રકાર (Type of Nondh):",
+        ["સામાન્ય ખરીદી (Standard Purchase)", "કાયમી પેશગી / એડવાન્સ (Advance Payment)"],
+        horizontal=True,
+        help="એવી સંસ્થા/વેન્ડર માટે કે જે કામ પૂર્ણ થાય તે પહેલાં જ પેમેન્ટ માંગે (દા.ત. GBRC) ત્યાં 'કાયમી પેશગી / એડવાન્સ' પસંદ કરો.",
+    )
+    is_advance = "પેશગી" in nondh_type
+
+    advance_vendor = ""
+    if is_advance:
+        advance_vendor = st.text_input(
+            "ક્વોટેશન આપનાર સંસ્થા/વેન્ડરનું નામ (Institute providing quotation):",
+            value="ગુજરાત બાયોટેકનોલોજી રિસર્ચ સેન્ટર (GBRC), ગાંધીનગર",
+            help="જે સંસ્થા સેવા આપશે અને એડવાન્સ પેમેન્ટ માંગે છે તેનું નામ.",
+        )
+
     col1, col2 = st.columns(2)
     with col1:
         text_prompt = st.text_area("તમારી જરૂરિયાત લખો:", placeholder="e.g., need 10 entomological pins...")
     with col2:
         uploaded_image = st.file_uploader("અથવા PDF/ફોટો અપલોડ કરો:", type=["pdf", "jpg", "jpeg", "png"])
-    
+
     if st.button("જનરેટ કરો (Generate)"):
         if not api_key:
             st.error("Please add GEMINI_API_KEY in Streamlit secrets.")
@@ -2282,11 +2299,8 @@ with tab1:
 
                     genai.configure(api_key=api_key)
                     model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
-                    
-                    sys_prompt = f"""
-                    You are an expert administrative AI for the Department of Entomology, N. M. College of Agriculture, NAU, Navsari.
-                    Your task is to generate a formal 'સાદર નોંધ' in Gujarati.
-                    
+
+                    common_context = f"""
                     [CONTEXT START]
                     {statute_context[:15000]}
                     {sample_context}
@@ -2295,6 +2309,69 @@ with tab1:
                     [APPROVED LEARNING MEMORY AND HERMES-STYLE SKILLS]
                     {learning['prompt'] if learning['prompt'] else 'No approved memories or skills matched this request.'}
                     [END APPROVED LEARNING]
+                    """
+
+                    common_table_rules = """
+                    If a table is included, the headers MUST strictly be in ENGLISH and use these EXACT columns:
+                    Sr. No. | Details | Required Quantity | Available Pkt/Unit | Unit/Pkt Price | Total Price
+
+                    CRITICAL TABLE RULES:
+                    1. The 'Details' column MUST contain ONLY the item/service name without the package size (e.g., "Sanger Sequencing- COI Gene Sequencing").
+                    2. The 'Available Pkt/Unit' column MUST contain the package size and unit type (e.g., "500 ML", "25 GM", "1 Unit").
+                    3. The 'Required Quantity' and 'Unit/Pkt Price' columns MUST contain pure numbers only (e.g., "1" or "1416"). Do NOT put units like "ML" or "GM" in these two columns.
+                    4. Do NOT generate a "Grand Total" row. The system will calculate it automatically.
+                    """
+
+                    common_signatures = """
+                    ખેતીવાડી અધિકારી,કીટકશાસ્ત્ર વિભાગ
+                    પ્રોજેકટ ઈન્ચાર્જ,કીટકશાસ્ત્ર વિભાગ
+                    પ્રાધ્યાપક અને વડા,કીટકશાસ્ત્ર વિભાગ
+
+                    આચાર્ય અને ડીનશ્રી, ન. મ. કૃષિ મહાવિધાયલય, ન.કૃ.યુ. નવસારી
+                    """
+
+                    if is_advance:
+                        sys_prompt = f"""
+                    You are an expert administrative AI for the Department of Entomology, N. M. College of Agriculture, NAU, Navsari.
+                    Your task is to generate a formal 'સાદર નોંધ' in Gujarati of the type "કાયમી પેશગી / એડવાન્સ પેશગી" (ADVANCE PAYMENT note).
+
+                    WHEN THIS TYPE IS USED: An outside institute/vendor (here: {advance_vendor or 'ગુજરાત બાયોટેકનોલોજી રિસર્ચ સેન્ટર (GBRC), ગાંધીનગર'}) provides a service (e.g. Sanger Sequencing / COI Gene, molecular identification, testing) and DEMANDS PAYMENT IN ADVANCE, before the work is completed. Therefore the department must first withdraw the money as an advance (પેશગી) and pay the institute itself. This note seeks the Dean's in-principle (સૈદ્ધાંતિક) sanction to withdraw that advance.
+
+                    {common_context}
+
+                    Format REQUIRED (follow this wording style closely, filling the brackets from the user's request):
+                    તા. {datetime.date.today().strftime('%d/%m/%Y')}
+                    સ્થળ: નવસારી
+                    સાદર નોંધ:
+                    વિષય: કાયમી પેશગી પેટે [Service / work name, e.g. Mite Species નું Molecular Identification] માટે નાણા ઉપાડવા બાબત...
+                    સવિનય સહ ઉપરોક્ત વિષય અન્વયે જણાવવાનું કે, અત્રેનાં કીટકશાસ્ત્ર વિભાગની આઈ.સી.એ.આર. યોજના AINP on Agril Acarology બ.સ. ૩૦૩/૨૦૯૨ અંતર્ગત [detailed logical reason describing the research need and why the outside service is required]. આ માટે {advance_vendor or 'ગુજરાત બાયોટેકનોલોજી રિસર્ચ સેન્ટર (GBRC), ગાંધીનગર'} દ્વારા મળેલ ક્વોટેશન મુજબ અંદાજિત ખર્ચ [Total Amount]/- (અંકે રૂપિયા [amount in Gujarati words] પૂરા) થનાર છે. જેના માટે [Total Amount]/- (અંકે રૂપિયા [amount in Gujarati words] પૂરા) એડવાન્સ પેટે ઉપાડવાની જરૂરિયાત ઉપસ્થિત થયેલ છે.
+
+                    [INSERT THE MARKDOWN TABLE HERE]
+
+                    સદર ખર્ચની ખરીદી કરવા આપશ્રીની સત્તા અન્વયે કાયમી પેશગી ઉપાડવાની સૈદ્ધાંતિક મંજુરી આપવા આપ સાહેબશ્રીને નમ્ર વિનંતી છે. સદર નાણા બ.સ ૩૦૩/૨૦૯૨ માંથી ફાળવી સદર યોજનાના પ્રોજેક્ટ ઈન્ચાર્જશ્રીને સોંપવા નમ્ર વિનંતી.
+
+                    ADVANCE-PAYMENT SPECIFIC RULES:
+                    1. This is an advance (પેશગી) note, so DO NOT ask for a specific "સ્ટેચ્યુટ ૧૨૧ આઈટમ નંબર" in the main body. The sanction is granted under the Dean's authority to release advance/પેશગી from the scheme funds.
+                    2. Always name the quotation-giving institute exactly as: {advance_vendor or 'ગુજરાત બાયોટેકનોલોજી રિસર્ચ સેન્ટર (GBRC), ગાંધીનગર'}.
+                    3. State the amount identically in both the "અંદાજિત ખર્ચ" sentence and the "એડવાન્સ પેટે ઉપાડવાની" sentence, with the Gujarati words in brackets.
+                    4. Always end with the request to release the funds from બ.સ ૩૦૩/૨૦૯૨ and hand them to the Project In-charge.
+
+                    TABLE LOGIC:
+                    An advance-payment note ALWAYS lists the service(s) being paid for, so YOU MUST include a markdown table.
+                    {common_table_rules}
+                    {common_signatures}
+                    ==== AI STATUTE ANALYSIS ====
+                    1. **Nature of Sanction:** Explain that this is an advance/કાયમી પેશગી released under the Dean's financial powers because {advance_vendor or 'the institute'} demands payment before delivering the service.
+                    2. **Justification:** Explain why paying this institute in advance is necessary for the research (relate to the AINP Acarology scheme).
+                    3. **Similar Precedent from Sample Nondh:** If any advance/પેશગી precedent exists in the Sample Nondh context, cite its Subject, Date and wording. If none, state that this follows the standard GBRC advance-payment format.
+                    4. **Fund Source:** Confirm the funds are drawn from AINP on Agril Acarology (બ.સ. ૩૦૩/૨૦૯૨).
+                    """
+                    else:
+                        sys_prompt = f"""
+                    You are an expert administrative AI for the Department of Entomology, N. M. College of Agriculture, NAU, Navsari.
+                    Your task is to generate a formal 'સાદર નોંધ' in Gujarati.
+
+                    {common_context}
 
                     Format REQUIRED:
                     તા. {datetime.date.today().strftime('%d/%m/%Y')}
@@ -2307,29 +2384,15 @@ with tab1:
                     STATUTE 121 ITEM NUMBER DETERMINATION (CRITICAL INSTRUCTION):
                     1. You MUST read the 'Sample Nondh Format' provided in the context to find the historically correct 'આઈટમ નંબર' (Item Number) for this type of purchase.
                     2. Treat the Sample Nondh as the ultimate precedent. If the purchase involves laboratory chemicals, research materials, or AINP scheme-related items, strictly use the exact item number found in the sample (e.g., "૫૪ (i)" or "54 (i)").
-                    3. Only rely on the dense 'Statute 121 Rules' PDF text if the item category is completely new and not covered by the sample document precedent. 
+                    3. Only rely on the dense 'Statute 121 Rules' PDF text if the item category is completely new and not covered by the sample document precedent.
                     4. Replace [DETERMINED_ITEM_NUMBER] with the exact number in Gujarati format (like ૫૪ (i)). Do not guess or hallucinate numbers like 45 (ii) (ii).
 
                     TABLE LOGIC:
-                    Analyze the user request to determine if a table is required. 
+                    Analyze the user request to determine if a table is required.
                     - If the request is a general administrative note WITHOUT specific items to purchase, DO NOT include a table.
                     - If the request involves purchasing, requesting, or listing items with quantities and prices, YOU MUST include a markdown table.
-                    
-                    If a table is included, the headers MUST strictly be in ENGLISH and use these EXACT columns:
-                    Sr. No. | Details | Required Quantity | Available Pkt/Unit | Unit/Pkt Price | Total Price
-                    
-                    CRITICAL TABLE RULES:
-                    1. The 'Details' column MUST contain ONLY the item name without the package size (e.g., "ACETIC ACID GLACIAL 99.5% Extra Pure").
-                    2. The 'Available Pkt/Unit' column MUST contain the package size and unit type (e.g., "500 ML", "25 GM", "1 Unit").
-                    3. The 'Required Quantity' and 'Unit/Pkt Price' columns MUST contain pure numbers only (e.g., "1" or "335.95"). Do NOT put units like "ML" or "GM" in these two columns.
-                    4. Do NOT generate a "Grand Total" row. The system will calculate it automatically.
-
-                    ખેતીવાડી અધિકારી,કીટકશાસ્ત્ર વિભાગ
-                    પ્રોજેકટ ઈન્ચાર્જ,કીટકશાસ્ત્ર વિભાગ
-                    પ્રાધ્યાપક અને વડા,કીટકશાસ્ત્ર વિભાગ
-
-                    આચાર્ય અને ડીનશ્રી, ન. મ. કૃષિ મહાવિધાયલય, ન.કૃ.યુ. નવસારી
-                    
+                    {common_table_rules}
+                    {common_signatures}
                     ==== AI STATUTE ANALYSIS ====
                     1. **Original Statute 121 Details:** - **Item Number Used:** [State the specific rule number you used].
                         - **Original Statute Text:** [Provide the EXACT quote/sentence directly from the attached Statute 121 PDF for this specific rule number].
@@ -2337,7 +2400,7 @@ with tab1:
                     3. **Similar Precedent from Sample Nondh:** [Find a similar past purchase in the uploaded 'Sample Nondh' context. List its Subject, Date, and the Statute Item Number it used to prove your choice is historically accurate].
                     4. **Rejected Alternative Statute:** [Find another statute item number from the PDF that looks similar but is INCORRECT (e.g., a rule for furniture instead of chemicals). Quote it and explicitly explain why it is NOT compatible with this purchase].
                     """
-                    
+
                     inputs = [sys_prompt, text_prompt]
                     if uploaded_image:
                         if uploaded_image.type == "application/pdf":
