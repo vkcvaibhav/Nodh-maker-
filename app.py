@@ -1787,7 +1787,52 @@ def set_cell_border(cell, **kwargs):
                 if key in edge_data:
                     element.set(qn('w:{}'.format(key)), str(edge_data[key]))
 
-def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount_in_guj_words, reg_type, reg_page_no, bill_reg_date, bill_reg_page_no, bill_reg_sr_no, item_no, approval_no, approval_date):
+# પત્રક-અ મુજબ સત્તાવાર EXP CODE યાદી (વર્ગીકરણની વિગત -> કોડ નંબર)
+EXP_CODE_LIST = [
+    ("પુસ્તકો અને સામાયિકો", 3),
+    ("વિજળી ખર્ચ (ઓફિસ)", 4),
+    ("પોસ્ટ એન્ડ ટેલીગ્રામ", 5),
+    ("ટેલીફોન ચાર્જ", 6),
+    ("ભાડું દર કરવેર ટેક્ષ", 7),
+    ("પ્રિન્ટીંગ એન્ડ બાઈન્ડીંગ ખર્ચ", 8),
+    ("સ્ટેશનરી એન્ડ બાઈન્ડીંગ ખર્ચ", 9),
+    ("ઓફીસ વ્હીકલ રીપેરીંગ ખર્ચ", 10),
+    ("લીગલ ચાર્જ", 11),
+    ("પેટ્રોલ ડીઝલ વ્હીકલ (ઓફિસ/ફાર્મ)", 12),
+    ("મજુરી ખર્ચ (ઓફિસ)", 13),
+    ("કન્ઝુમેબલ આર્ટીકલ (ઓફિસ)", 14),
+    ("મજુરી તથા કલ્ટીવેશન ચાર્જ (ફાર્મ/લેબ)", 15),
+    ("ફાર્મના ટ્રેક્ટરના મશીન રીપેરીંગ", 16),
+    ("ચા-પાણી નાસ્તાના ખર્ચ (મીટીંગ)", 17),
+    ("પાણી ઈરીગેશન ખર્ચ", 18),
+    ("ફાર્મ સાધનોના રીપેરીંગ ખર્ચ", 19),
+    ("પશુઓની ખરીદી ખર્ચ", 20),
+    ("પશુઓના આહાર ખર્ચ", 21),
+    ("વિજળી ખર્ચ (ફાર્મ)", 22),
+    ("ફર્ટીલાઈઝર્સ ખર્ચ", 23),
+    ("બિયારણ તથા બીજ ખર્ચ", 24),
+    ("પેસ્ટીસાઈડ/ઈન્સેક્ટીસાઈડ ખર્ચ", 25),
+    ("કેમીકલ ખર્ચ", 26),
+    ("સીક્યુરીટી ખર્ચ", 27),
+    ("એક્સપેન્ડીચર વીથ ટ્રાન્સફર ખર્ચ", 28),
+    ("પેકીંગ ખર્ચ", 29),
+    ("પરચુરણ ખર્ચ કન્ઝુમેબલ આર્ટીકલ (ફાર્મ)", 30),
+    ("એગ્રીકલ્ચર ફેર", 31),
+    ("કેમીકલ/ગ્લાસવેર લેબોરેટરી ખર્ચ", 32),
+    ("જાહેરાત", 33),
+    ("ઓફિસ ઈક્વીપમેન્ટ રીપેરીંગ ચાર્જ", 34),
+    ("પરચુરણ ખર્ચ (ટીચીંગ)", 35),
+    ("ગેસ્ટ હાઉસ મેન્ટનન્સ", 36),
+    ("ઓડીટોરીયમ", 37),
+    ("સ્ટાઈપેન્ડ/ટ્રેનીંગ/ફેલોશીપ", 38),
+    ("એજ્યુકેશન ટુર", 39),
+    ("વર્કશોપ/સેમીનાર", 40),
+    ("લાયબ્રેરી ચાર્જ", 41),
+    ("દુધ વિતરણ ખર્ચ", 42),
+    ("પરચુરણ ખર્ચ", 43),
+]
+
+def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount_in_guj_words, reg_type, reg_page_no, bill_reg_date, bill_reg_page_no, bill_reg_sr_no, item_no, approval_no, approval_date, exp_code="", grant_amount=""):
     amount = coerce_amount(amount)
     doc = Document()
     
@@ -1892,56 +1937,75 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     doc.add_page_break()
 
     # --- PAGE 2 ---
-    def add_p2_header_row(cell, text, size=10):
+    def add_p2_header_row(cell, text, size=10, bold=False, align=WD_ALIGN_PARAGRAPH.LEFT):
         p = cell.paragraphs[0]
         p.paragraph_format.space_before = Pt(0)
         p.paragraph_format.space_after = Pt(0)
-        p.paragraph_format.left_indent = Inches(0) 
-        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        p.paragraph_format.left_indent = Inches(0)
+        p.alignment = align
         run = p.add_run(text)
         run.font.size = Pt(size)
-        
-    top_table = doc.add_table(rows=4, cols=3)
+        run.bold = bold
+
+    # --- સુધારો: સત્તાવાર વાઉચર મુજબ બોક્સવાળું (bordered) હેડર ટેબલ + EXP. CODE NO. બોક્સ ---
+    thin_border = {"sz": 8, "val": "single", "color": "000000"}
+    def box_cell(cell):
+        set_cell_border(cell, top=thin_border, bottom=thin_border, left=thin_border, right=thin_border)
+
+    top_table = doc.add_table(rows=4, cols=5)
     top_table.autofit = False
     top_table.alignment = WD_TABLE_ALIGNMENT.LEFT
-        
+
+    header_widths = [Inches(2.0), Inches(0.3), Inches(2.2), Inches(1.5), Inches(0.8)]
     for row in top_table.rows:
-        row.cells[0].width = Inches(2.0)
-        row.cells[1].width = Inches(0.3)
-        row.cells[2].width = Inches(4.9)
+        for ci, w in enumerate(header_widths):
+            row.cells[ci].width = w
+
+    guj_grant_year = eng_to_guj(grant_year) if grant_year else "૨૦      - ૨૦"
 
     add_p2_header_row(top_table.cell(0,0), "બજેટ સદર")
     add_p2_header_row(top_table.cell(0,1), ":-")
-    
-    p_0_2 = top_table.cell(0,2).paragraphs[0]
-    p_0_2.paragraph_format.space_before = Pt(0)
-    p_0_2.paragraph_format.space_after = Pt(0)
-    p_0_2.paragraph_format.left_indent = Inches(0)
-    run_bh = p_0_2.add_run(f"{budget_head} \t\t")
-    run_bh.font.size = Pt(10)
-    run_exp = p_0_2.add_run("EXP. CODE NO._________")
-    run_exp.font.size = Pt(10)
-    run_exp.bold = True
+    add_p2_header_row(top_table.cell(0,2), f"{budget_head}", bold=True)
+    add_p2_header_row(top_table.cell(0,3), "EXP. CODE NO.", size=11, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
+    add_p2_header_row(top_table.cell(0,4), f"{exp_code}" if exp_code else "", size=12, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER)
 
-    add_p2_header_row(top_table.cell(1,0), "ફાળવેલ ગ્રાન્ટ વર્ષ: ૨૦  - ૨૦")
+    add_p2_header_row(top_table.cell(1,0), f"ફાળવેલ ગ્રાન્ટ વર્ષ: {guj_grant_year}")
     add_p2_header_row(top_table.cell(1,1), ":-")
-    add_p2_header_row(top_table.cell(1,2), f"{grant_year}" if grant_year else "                     ")
-    
+    add_p2_header_row(top_table.cell(1,2), f"{grant_amount}" if grant_amount else "", bold=True)
+
     add_p2_header_row(top_table.cell(2,0), "બીલની કુલ રકમ")
     add_p2_header_row(top_table.cell(2,1), ":-")
-    add_p2_header_row(top_table.cell(2,2), format_amount(amount)) 
-    
+    add_p2_header_row(top_table.cell(2,2), format_amount(amount), bold=True)
+
     add_p2_header_row(top_table.cell(3,0), "ચુકવણું કરવામાં આવનાર પાર્ટીનું નામ (અંગ્રેજી કેપીટલ લેટર)")
     add_p2_header_row(top_table.cell(3,1), ":-")
-    add_p2_header_row(top_table.cell(3,2), f"{party_name}")
-    
-    p_cert = doc.add_paragraph()
-    p_cert.paragraph_format.space_before = Pt(6) 
-    p_cert.paragraph_format.space_after = Pt(4)  
+    add_p2_header_row(top_table.cell(3,2), f"{party_name}", bold=True)
+
+    # ડાબી બાજુના ૩ કોલમ (લેબલ, :-, વેલ્યુ) દરેક હરોળમાં બોક્સવાળા; EXP CODE બોક્સ ફક્ત પહેલી હરોળમાં
+    for ri in range(4):
+        for ci in range(3):
+            box_cell(top_table.cell(ri, ci))
+    box_cell(top_table.cell(0, 3))
+    box_cell(top_table.cell(0, 4))
+
+    # --- સુધારો: ":: પ્રમાણપત્ર ::" સત્તાવાર ફોર્મેટ મુજબ બોક્સમાં ---
+    cert_title_table = doc.add_table(rows=1, cols=1)
+    cert_title_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    cert_title_table.columns[0].width = Inches(2.0)
+    cert_title_cell = cert_title_table.cell(0, 0)
+    cert_title_cell.width = Inches(2.0)
+    box_cell(cert_title_cell)
+    p_cert = cert_title_cell.paragraphs[0]
+    p_cert.paragraph_format.space_before = Pt(2)
+    p_cert.paragraph_format.space_after = Pt(2)
     run_cert = p_cert.add_run(":: પ્રમાણપત્ર ::")
     run_cert.bold = True
     run_cert.font.size = Pt(14)
     p_cert.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    p_cert_gap = doc.add_paragraph()
+    p_cert_gap.paragraph_format.space_before = Pt(0)
+    p_cert_gap.paragraph_format.space_after = Pt(2)
     
     table = doc.add_table(rows=9, cols=2)
     table.autofit = False
@@ -1999,7 +2063,8 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
         "સ્ટેમ્પ": "____________",
         "સ્ટેશનરી": "____________",
         "પરચુરણ માલ સામાન": "____________",
-        "રીપેરીંગ": "____________"
+        "રીપેરીંગ": "____________",
+        "ઓફિસ એક્સપેન્ડિચર": "____________"
     }
 
     if guj_reg_page:
@@ -2016,11 +2081,11 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     
     cert_3 = (
         f"બીલમાં દર્શાવેલ માલની ખરીદી બજાર ભાવ તપાસી ભાવો મેળવી સૌથી ઓછા ભાવ મુજબ છે અને સારી સ્થિતિમાં મળેલ છે. "
-        f"જે કચેરીના સ્ટોર રોજમેળ રજી પાના નં. {blanks['સ્ટોર રોજમેળ']}../ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ) "
-        f"રજી. પાના નં. {blanks['ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ)']} ડેડસ્ટોક રજી. નં.... {blanks['ડેડસ્ટોક']} / ટેલીફોન રજી. પાના "
-        f"નં {blanks['ટેલીફોન']} / સ્ટેમ્પ રજી. પાના નં {blanks['સ્ટેમ્પ']} / સ્ટેશનરી રજી. પાના નં. "
-        f"{blanks['સ્ટેશનરી']} .રજીસ્ટરનાં ____________ / પરચુરણ માલ સામાન /.... {blanks['પરચુરણ માલ સામાન']}../ રીપેરીંગ "
-        f"રજી. પાના નં.. {blanks['રીપેરીંગ']} નાં રોજ જમા કરવામાં આવેલ છે."
+        f"જે કચેરીના સ્ટોર રોજમેળ રજી. પાના નં. {blanks['સ્ટોર રોજમેળ']} / ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ/ખાતાવહી) "
+        f"રજી. પાના નં. {blanks['ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ)']} / ડેડસ્ટોક રજી. નં. {blanks['ડેડસ્ટોક']} / ટેલીફોન રજી. પાના "
+        f"નં. {blanks['ટેલીફોન']} / સ્ટેમ્પ રજી. પાના નં. {blanks['સ્ટેમ્પ']} / સ્ટેશનરી રજી. પાના નં. "
+        f"{blanks['સ્ટેશનરી']} / રીપેરીંગ રજી. પાના નં. {blanks['રીપેરીંગ']} / પરચુરણ માલ સામાન {blanks['પરચુરણ માલ સામાન']} / "
+        f"ઓફિસ એક્સપેન્ડિચર રજીસ્ટરનાં પાના નં. {blanks['ઓફિસ એક્સપેન્ડિચર']} નાં રોજ જમા કરવામાં આવેલ છે."
     )
     
     cert_4 = f"સદર બીલમાં દર્શાવવામાં આવેલ ખર્ચ સેલ્સ ટેક્ષ / એડી.ટેક્ષ / એકસાઇડયુટી / સેન્ટ્રલ ટેક્ષ વિગેરે પાર્ટીના માન્ય થયેલ ભાવ મુજબ ચકાસણી કરવામાં આવેલ છે. અને તે મુજબ પાર્ટીના બીલમાં દર્શાવ્યા મુજબની રકમ રૂ. {guj_amount}/- (અંકે રૂ. {amount_in_guj_words}) પુરા ચુકવવા ભલામણ કરવામાં આવે છે."
@@ -2036,55 +2101,64 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
     add_row(7, "૮.", cert_8, size=11)
     add_row(8, "૯.", "સંશોધન નિયામકશ્રીના ૩૦/૧૦/૨૦૨૧ના પરિપત્રનો અમલ કરેલ છે.", size=11)
     
+    # --- સુધારો: "font same" — બંધ લાઈન બાકીના મુદ્દાઓ જેવા જ ફોન્ટ સાઈઝ (Pt 9) અને bold ---
     p_special_note = doc.add_paragraph()
     p_special_note.paragraph_format.space_before = Pt(0)
-    p_special_note.paragraph_format.space_after = Pt(2) 
+    p_special_note.paragraph_format.space_after = Pt(2)
     p_special_note.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_special_note = p_special_note.add_run("સદરહું ખર્ચ કચેરીની અગત્યની કામગીરીને ધ્યાને લઇ તેમજ યુનિવર્સિટીનાં હિતાર્થે કરવામાં આવેલ છે.")
-    run_special_note.font.size = Pt(11)
-    
+    run_special_note.font.size = Pt(9)
+    run_special_note.bold = True
+
     today_guj = eng_to_guj(datetime.date.today().strftime('%d/%m/%Y'))
     p_loc = doc.add_paragraph()
-    p_loc.paragraph_format.space_before = Pt(2) 
+    p_loc.paragraph_format.space_before = Pt(2)
     p_loc.paragraph_format.space_after = Pt(12)
     run_loc = p_loc.add_run(f"સ્થળ : નવસારી\nતારીખ : {today_guj}")
     run_loc.font.size = Pt(12)
-    
-    # --- સુધારેલો ભાગ: ૨ કોલમને બદલે ૩ સહીના કોલમ (3 Signature Columns) ---
+
+    # --- સુધારો: સત્તાવાર વાઉચર મુજબ સહીના ૩ કોલમ — હોદ્દો + વિભાગ + કચેરીનું નામ ---
     table_sig = doc.add_table(rows=1, cols=3)
     table_sig.alignment = WD_TABLE_ALIGNMENT.CENTER
-    
-    # કુલ લિમિટ (6.8 Inches) ને ૩ સરખા ભાગમાં વહેંચી દીધી (આશરે 2.26 ઇંચ દરેક)
+
     col_widths = [Inches(2.26), Inches(2.26), Inches(2.26)]
-    for i, cell in enumerate(table_sig.rows[0].cells): 
+    for i, cell in enumerate(table_sig.rows[0].cells):
         cell.width = col_widths[i]
-    
-    # કોલમ ૧: ખેતીવાડી અધિકારી (Left Alignment)
-    p_s1 = table_sig.cell(0, 0).paragraphs[0]
-    p_s1.paragraph_format.space_before, p_s1.paragraph_format.space_after = Pt(0), Pt(0)
-    p_s1.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    run_s1 = p_s1.add_run("ખેતીવાડી અધિકારીની\nસહી અને હોદ્દો")
-    run_s1.bold, run_s1.font.size = True, Pt(11)
-    
-    # કોલમ ૨: સિનિયર અકેરોલોજીસ્ટ (Center Alignment)
-    p_s2 = table_sig.cell(0, 1).paragraphs[0]
-    p_s2.paragraph_format.space_before, p_s2.paragraph_format.space_after = Pt(0), Pt(0)
-    p_s2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_s2 = p_s2.add_run("સિનિયર અકેરોલોજીસ્ટની\nસહી અને હોદ્દો")
-    run_s2.bold, run_s2.font.size = True, Pt(11)
-    
-    # કોલમ ૩: વિભાગીય વડા (Right Alignment)
-    p_s3 = table_sig.cell(0, 2).paragraphs[0]
-    p_s3.paragraph_format.space_before, p_s3.paragraph_format.space_after = Pt(0), Pt(0)
-    p_s3.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    run_s3 = p_s3.add_run("વિભાગીય વડાની\nસહી અને હોદ્દો")
-    run_s3.bold, run_s3.font.size = True, Pt(11)
-    
-    # --- નીચેનો બાકીનો કોડ જેમ છે તેમ જ રહેશે ---
-    p_passed = doc.add_paragraph()
-    p_passed.paragraph_format.space_before, p_passed.paragraph_format.space_after = Pt(20), Pt(6)
-    run_passed = p_passed.add_run("Passed for Payment Rs ........................................\nRupees: ........................................................................................")
-    run_passed.font.size = Pt(12)
+
+    sig_titles = ["ખેતી અધિકારી", "સિનિયર એકેરોલોજિસ્ટ", "પ્રાધ્યાપક અને વડા"]
+    for i, title in enumerate(sig_titles):
+        p_sig = table_sig.cell(0, i).paragraphs[0]
+        p_sig.paragraph_format.space_before, p_sig.paragraph_format.space_after = Pt(0), Pt(0)
+        p_sig.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_sig = p_sig.add_run(f"{title}\nકિટકશાસ્ત્ર વિભાગ\nન.મ.કૃ.મ., ન.કૃ.યુ., નવસારી")
+        run_sig.bold, run_sig.font.size = True, Pt(11)
+
+    # --- સુધારો: "Table form" — Passed for Payment બોક્સવાળા ટેબલમાં ---
+    p_pay_gap = doc.add_paragraph()
+    p_pay_gap.paragraph_format.space_before, p_pay_gap.paragraph_format.space_after = Pt(14), Pt(0)
+
+    pay_table = doc.add_table(rows=2, cols=2)
+    pay_table.autofit = False
+    pay_table.alignment = WD_TABLE_ALIGNMENT.LEFT
+    pay_widths = [Inches(2.2), Inches(4.6)]
+    for row in pay_table.rows:
+        for ci, w in enumerate(pay_widths):
+            row.cells[ci].width = w
+        for cell in row.cells:
+            box_cell(cell)
+
+    p_pay1 = pay_table.cell(0, 0).paragraphs[0]
+    p_pay1.paragraph_format.space_before, p_pay1.paragraph_format.space_after = Pt(2), Pt(2)
+    run_pay1 = p_pay1.add_run("Passed for Payment Rs")
+    run_pay1.bold, run_pay1.font.size = True, Pt(12)
+
+    p_pay2 = pay_table.cell(1, 0).paragraphs[0]
+    p_pay2.paragraph_format.space_before, p_pay2.paragraph_format.space_after = Pt(2), Pt(2)
+    run_pay2 = p_pay2.add_run("Rupees :")
+    run_pay2.bold, run_pay2.font.size = True, Pt(12)
+
+    p_pay_after = doc.add_paragraph()
+    p_pay_after.paragraph_format.space_before, p_pay_after.paragraph_format.space_after = Pt(6), Pt(0)
     
     p_aao = doc.add_paragraph()
     p_aao.paragraph_format.space_before, p_aao.paragraph_format.space_after = Pt(0), Pt(0)
@@ -2958,8 +3032,19 @@ with tab5:
             col_p1, col_p2 = st.columns(2)
             with col_p1:
                 budget_head_pst = st.text_input("Budget Head No.", value="303/2092 (AINP on Agril Acarology)", key="bh_t5")
-                grant_year = st.text_input("ફાળવેલ ગ્રાન્ટ વર્ષ (Grant Year)", value="", placeholder="હાથેથી લખવા માટે ખાલી છોડી દો")
+                grant_year = st.text_input("ફાળવેલ ગ્રાન્ટ વર્ષ (Grant Year)", value="", placeholder="દા.ત. 2026-27 (ખાલી = હાથેથી)")
+                grant_amount_pst = st.text_input("ફાળવેલ ગ્રાન્ટ રકમ (Allocated Grant)", value="", placeholder="દા.ત. 1,00,000/- (ખાલી = હાથેથી)", key="grant_amt_t5")
                 party_name_pst = st.text_input("પાર્ટીનું નામ (Party Name)", value=v_name_t5, key="party_t5")
+
+                # --- EXP CODE NO. (પત્રક-અ મુજબ સત્તાવાર યાદી) ---
+                exp_options = ["ખાલી રાખો (હાથેથી લખવા)"] + [f"{code} - {name}" for name, code in EXP_CODE_LIST] + ["અન્ય (જાતે કોડ લખો)"]
+                exp_choice = st.selectbox("EXP. CODE NO. (પત્રક-અ મુજબ પસંદ કરો)", exp_options, key="exp_code_t5")
+                if exp_choice == "અન્ય (જાતે કોડ લખો)":
+                    exp_code_pst = st.text_input("EXP કોડ નંબર જાતે લખો", value="", key="exp_code_manual_t5")
+                elif exp_choice.startswith("ખાલી"):
+                    exp_code_pst = ""
+                else:
+                    exp_code_pst = exp_choice.split(" - ")[0]
             with col_p2:
                 # --- નવો સુધારો: Streamlit ની મેમરીને સીધી અપડેટ કરવા માટેનું લોજીક ---
                 # જો Tab 4 માં આ જ ઓર્ડર ખૂલ્યો હોય અને ત્યાં રકમ સેટ હોય, તો Tab 5 ની મેમરી ફરજિયાત ઓવરરાઈટ કરો
@@ -3014,7 +3099,7 @@ Return ONLY the Gujarati translation. Example: for 3956 return 'ત્રણ હ
             st.markdown("#### 📝 રજીસ્ટર અને નોંધની વિગતો (Register Details - મુદ્દા નં. ૩ અને ૮)")
             col_r1, col_r2 = st.columns(2)
             with col_r1:
-                reg_type = st.selectbox("કયા રજીસ્ટરમાં નોંધ કરી? (મુદ્દા નં. ૩)", ["ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ)", "ડેડસ્ટોક", "સ્ટોર રોજમેળ", "ટેલીફોન", "સ્ટેમ્પ", "સ્ટેશનરી", "પરચુરણ માલ સામાન", "રીપેરીંગ"])
+                reg_type = st.selectbox("કયા રજીસ્ટરમાં નોંધ કરી? (મુદ્દા નં. ૩)", ["ચીજવસ્તુ વપરાશ (કન્ઝયુમેબલ)", "ડેડસ્ટોક", "સ્ટોર રોજમેળ", "ટેલીફોન", "સ્ટેમ્પ", "સ્ટેશનરી", "પરચુરણ માલ સામાન", "રીપેરીંગ", "ઓફિસ એક્સપેન્ડિચર"])
                 reg_page_no = st.text_input("રજીસ્ટર પાના નં. (Register Page No.)", value="")
             with col_r2:
                 bill_reg_date = st.date_input("બીલ રજીસ્ટરમાં નોંધની તારીખ (મુદ્દા નં. ૮)", value=datetime.date.today())
@@ -3035,9 +3120,10 @@ Return ONLY the Gujarati translation. Example: for 3956 return 'ત્રણ હ
                         
                         # Added new parameters to function call
                         pst_docx = create_bill_pasting_form(
-                            budget_head_pst, grant_year, party_name_pst, final_amt_pst, 
-                            amt_words_guj, reg_type, reg_page_no, bill_reg_date_str, 
-                            bill_reg_page_no, bill_reg_sr_no, item_no_pst, approval_no_pst, approval_date_pst
+                            budget_head_pst, grant_year, party_name_pst, final_amt_pst,
+                            amt_words_guj, reg_type, reg_page_no, bill_reg_date_str,
+                            bill_reg_page_no, bill_reg_sr_no, item_no_pst, approval_no_pst, approval_date_pst,
+                            exp_code=exp_code_pst, grant_amount=grant_amount_pst
                         )
                         st.download_button("Download Pasting Form", data=pst_docx, file_name=f"Pasting_Form_{v_name_t5}.docx")
             
