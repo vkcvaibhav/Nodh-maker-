@@ -2307,14 +2307,14 @@ with tab0:
     summary_col1, summary_col2 = st.columns(2)
     with summary_col1:
         st.markdown("#### Money Summary")
-        st.dataframe(pd.DataFrame(dashboard_data["money_summary"]), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(dashboard_data["money_summary"]), width="stretch", hide_index=True)
     with summary_col2:
         st.markdown("#### Learning Queue")
-        st.dataframe(pd.DataFrame(dashboard_data["learning_queue"]), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(dashboard_data["learning_queue"]), width="stretch", hide_index=True)
 
     st.markdown("#### Next Actions")
     if dashboard_data["next_actions"]:
-        st.dataframe(pd.DataFrame(dashboard_data["next_actions"]), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(dashboard_data["next_actions"]), width="stretch", hide_index=True)
     else:
         st.success("No urgent next actions for the selected filters.")
 
@@ -2322,7 +2322,7 @@ with tab0:
     document_gaps = [row for row in dashboard_data["document_rows"] if row.get("Missing Count", 0) > 0]
     if document_gaps:
         st.warning(f"{sum(row.get('Missing Count', 0) for row in document_gaps)} required document slots are still missing.")
-        st.dataframe(pd.DataFrame(document_gaps), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(document_gaps), width="stretch", hide_index=True)
     elif dashboard_data["document_rows"]:
         st.success("All tracked workflow document slots are complete for the selected filters.")
     else:
@@ -2330,7 +2330,7 @@ with tab0:
 
     st.markdown("#### Pending Payments")
     if dashboard_data["pending_payments"]:
-        st.dataframe(pd.DataFrame(dashboard_data["pending_payments"]), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(dashboard_data["pending_payments"]), width="stretch", hide_index=True)
     else:
         st.success("No pending payment rows for the selected filters.")
 
@@ -2596,7 +2596,7 @@ with tab1:
             edited_df = st.data_editor(
                 df, 
                 num_rows="dynamic", 
-                use_container_width=True,
+                width="stretch",
                 column_config=custom_column_config
             )
             
@@ -2854,7 +2854,7 @@ with tab3:
         _, session_df, _ = parse_markdown_to_parts(record_dict[selected_nondh])
         if not session_df.empty: default_df = session_df
     
-    po_df = st.data_editor(default_df, num_rows="dynamic", use_container_width=True, key="po_editor")
+    po_df = st.data_editor(default_df, num_rows="dynamic", width="stretch", key="po_editor")
     
    # ડાઉનલોડ બટન અને ડેટાબેઝ સેવ કરવાનું નવું લોજીક
     # ડાઉનલોડ બટન અને ડેટાબેઝ સેવ કરવાનું નવું લોજીક
