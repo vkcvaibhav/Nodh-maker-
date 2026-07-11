@@ -1832,6 +1832,58 @@ EXP_CODE_LIST = [
     ("પરચુરણ ખર્ચ", 43),
 ]
 
+def get_nondh_details_by_id(nondh_id):
+    """EXP કોડ ઓળખવા માટે નોંધનો વિષય અને લખાણ મેળવે છે."""
+    if not nondh_id:
+        return "", ""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT subject, content FROM archive WHERE id=?", (nondh_id,))
+        row = c.fetchone()
+        conn.close()
+        if row:
+            return (row[0] or "", row[1] or "")
+    except Exception:
+        pass
+    return "", ""
+
+def suggest_exp_code(api_key, context_text):
+    """ખરીદીના વર્ણન પરથી AI વડે પત્રક-અ નો EXP કોડ આપોઆપ ઓળખે છે."""
+    if not api_key or not str(context_text).strip():
+        return None, ""
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+        code_lines = "\n".join(f"{code}: {name}" for name, code in EXP_CODE_LIST)
+        learning = get_learning_context(context_text, ["item_mapping", "bill_pasting", "general_workflow"], "exp_code_suggestion", memory_limit=4, skill_limit=1)
+        prompt = f"""You are classifying a purchase/expense of an agricultural university department (Entomology, NAU Navsari) into the official Gujarati expense-code list (પત્રક-અ).
+
+Expense code list (code: category):
+{code_lines}
+
+Approved learning memories (may contain past correct mappings):
+{learning['prompt'] if learning['prompt'] else 'None'}
+
+Purchase context:
+{compact_text(redact_sensitive(context_text), 2000)}
+
+Rules:
+- Laboratory chemicals, glassware, sequencing/analysis services for research -> 32 (કેમીકલ/ગ્લાસવેર લેબોરેટરી ખર્ચ) unless clearly office consumables.
+- Office consumable articles -> 14. Farm consumables -> 30. Stationery/printing -> 8 or 9.
+- Pick the SINGLE most appropriate code from the list above. Never invent a code outside the list.
+
+Return ONLY valid JSON: {{"code": <number>, "reason": "<one short Gujarati sentence>"}}"""
+        response = model.generate_content(prompt)
+        raw = response.text.strip().replace("```json", "").replace("```", "")
+        data = json.loads(raw)
+        code = int(data.get("code"))
+        if code in {c for _, c in EXP_CODE_LIST}:
+            return code, str(data.get("reason", "")).strip()
+    except Exception as e:
+        queue_warning(f"EXP code suggestion failed: {e}")
+    return None, ""
+
 def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount_in_guj_words, reg_type, reg_page_no, bill_reg_date, bill_reg_page_no, bill_reg_sr_no, item_no, approval_no, approval_date, exp_code="", grant_amount=""):
     amount = coerce_amount(amount)
     doc = Document()
@@ -3038,7 +3090,28 @@ with tab5:
 
                 # --- EXP CODE NO. (પત્રક-અ મુજબ સત્તાવાર યાદી) ---
                 exp_options = ["ખાલી રાખો (હાથેથી લખવા)"] + [f"{code} - {name}" for name, code in EXP_CODE_LIST] + ["અન્ય (જાતે કોડ લખો)"]
+
+                # AI વડે આપોઆપ EXP કોડ ઓળખો — PO દીઠ ફક્ત એક જ વાર AI કોલ થાય છે
+                exp_ai_key = f"exp_ai_{po_id_t5}"
+                if exp_ai_key not in st.session_state:
+                    nondh_subj_t5, nondh_cont_t5 = get_nondh_details_by_id(nondh_id_t5)
+                    exp_context = f"Party/Vendor: {v_name_t5}\nNondh Subject: {nondh_subj_t5}\nNondh Content: {nondh_cont_t5[:1500]}"
+                    with st.spinner("EXP કોડ AI થી આપોઆપ ઓળખવામાં આવી રહ્યો છે..."):
+                        st.session_state[exp_ai_key] = suggest_exp_code(api_key, exp_context)
+                ai_exp_code, ai_exp_reason = st.session_state.get(exp_ai_key) or (None, "")
+
+                # નવો PO પસંદ થાય ત્યારે AI નું સૂચન ડ્રોપડાઉનમાં આપોઆપ સેટ કરો (યુઝર પછી બદલી શકે)
+                if st.session_state.get("exp_po_marker_t5") != po_id_t5:
+                    st.session_state["exp_po_marker_t5"] = po_id_t5
+                    if ai_exp_code is not None:
+                        suggested_label = next((opt for opt in exp_options if opt.startswith(f"{ai_exp_code} - ")), None)
+                        if suggested_label:
+                            st.session_state["exp_code_t5"] = suggested_label
+
                 exp_choice = st.selectbox("EXP. CODE NO. (પત્રક-અ મુજબ પસંદ કરો)", exp_options, key="exp_code_t5")
+                if ai_exp_code is not None:
+                    st.caption(f"🤖 AI સૂચન: કોડ {ai_exp_code}" + (f" — {ai_exp_reason}" if ai_exp_reason else "") + " (જરૂર હોય તો ઉપરથી બદલો)")
+
                 if exp_choice == "અન્ય (જાતે કોડ લખો)":
                     exp_code_pst = st.text_input("EXP કોડ નંબર જાતે લખો", value="", key="exp_code_manual_t5")
                 elif exp_choice.startswith("ખાલી"):
@@ -3125,6 +3198,20 @@ Return ONLY the Gujarati translation. Example: for 3956 return 'ત્રણ હ
                             bill_reg_page_no, bill_reg_sr_no, item_no_pst, approval_no_pst, approval_date_pst,
                             exp_code=exp_code_pst, grant_amount=grant_amount_pst
                         )
+
+                        # જો યુઝરે AI નું EXP કોડ સૂચન બદલ્યું હોય, તો સાચું મેપિંગ લર્નિંગ સૂચન તરીકે સેવ કરો
+                        ai_exp_state = st.session_state.get(f"exp_ai_{po_id_t5}") or (None, "")
+                        if exp_code_pst and ai_exp_state[0] is not None and str(ai_exp_state[0]) != str(exp_code_pst):
+                            try:
+                                save_memory_suggestion(
+                                    "item_mapping", f"EXP code mapping: {party_name_pst}",
+                                    f"For purchases like '{party_name_pst}' the correct Patrak-A EXP code is {exp_code_pst} (AI had suggested {ai_exp_state[0]}).",
+                                    keywords=f"exp code, પત્રક-અ, {party_name_pst}", priority=6,
+                                    reason="User corrected AI EXP code suggestion in bill pasting form.",
+                                    source_type="bill_pasting", source_id=po_id_t5
+                                )
+                            except Exception:
+                                pass
                         st.download_button("Download Pasting Form", data=pst_docx, file_name=f"Pasting_Form_{v_name_t5}.docx")
             
             with col_btn_pst2:
