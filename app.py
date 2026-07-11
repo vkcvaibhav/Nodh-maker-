@@ -2370,17 +2370,17 @@ Approved memories and Hermes-style skills:
 """
                         coach_response = coach_model.generate_content(coach_prompt)
                         st.markdown(redact_sensitive(coach_response.text))
-                        with st.expander("Coach context used", expanded=False):
-                            if coach_learning["memories"]:
-                                st.markdown("**Memories**")
-                                for memory in coach_learning["memories"]:
-                                    st.caption(f"#{memory['id']} {memory['title']} ({memory['category']})")
-                            if coach_learning["skills"]:
-                                st.markdown("**Skills**")
-                                for skill in coach_learning["skills"]:
-                                    st.caption(f"#{skill['id']} {skill['name']} v{skill['version']}")
-                            if not coach_learning["memories"] and not coach_learning["skills"]:
-                                st.caption("No approved memories or skills were selected.")
+                        st.caption("Coach context used:")
+                        if coach_learning["memories"]:
+                            st.markdown("**Memories**")
+                            for memory in coach_learning["memories"]:
+                                st.caption(f"#{memory['id']} {memory['title']} ({memory['category']})")
+                        if coach_learning["skills"]:
+                            st.markdown("**Skills**")
+                            for skill in coach_learning["skills"]:
+                                st.caption(f"#{skill['id']} {skill['name']} v{skill['version']}")
+                        if not coach_learning["memories"] and not coach_learning["skills"]:
+                            st.caption("No approved memories or skills were selected.")
                     except Exception as e:
                         st.warning(f"AI Workflow Coach failed: {e}")
 
@@ -2615,7 +2615,7 @@ with tab1:
                 st.success(f"**Grand Total (કુલ રકમ): ₹ {grand_total_calc:,.2f}**")
                 
                 # Automatically sync the paragraph text with the accurate Grand Total
-                edit_pre = re.sub(r'(અંદાજિત ખર્ચ\s*).*?(\s*થનાર)', f'\g<1>{grand_total_calc:,.2f}\g<2>', edit_pre)
+                edit_pre = re.sub(r'(અંદાજિત ખર્ચ\s*).*?(\s*થનાર)', rf'\g<1>{grand_total_calc:,.2f}\g<2>', edit_pre)
         else:
             edited_df = pd.DataFrame()
             st.info("આ નોંધમાં ટેબલની જરૂરિયાત જણાઈ નથી. (No table required for this note based on the context).")
@@ -3225,7 +3225,8 @@ Return ONLY the Gujarati translation. Example: for 3956 return 'ત્રણ હ
 with tab6:
     st.markdown("### 🗄️ ડિજિટલ વોલ્ટ અને પેમેન્ટ ક્લોઝર (Vault & Payment Closure)")
 
-    with st.expander("🧠 Learning Memory & Hermes-Style Skills", expanded=False):
+    # FIX: st.expander ની અંદર st.expander ન ચાલે (StreamlitAPIException) — બહારનું expander toggle કર્યું
+    if st.toggle("🧠 Learning Memory & Hermes-Style Skills બતાવો", value=False, key="show_learning_center"):
         mem_tab, mem_sug_tab, skill_tab, skill_sug_tab, run_tab = st.tabs([
             "Approved Memories", "Memory Suggestions", "Approved Skills", "Skill Suggestions", "Skill Runs"
         ])
@@ -3296,8 +3297,8 @@ with tab6:
                     st.write(reason or "No reason provided.")
                     st.markdown(content)
                     st.caption(f"Keywords: {keywords}")
-                    with st.expander("Source Snapshot", expanded=False):
-                        st.text(source_snapshot or "")
+                    st.caption("Source Snapshot:")
+                    st.text(source_snapshot or "")
                     a_col, r_col = st.columns(2)
                     with a_col:
                         if st.button("Approve Memory", key=f"approve_mem_sug_{sug_id}"):
@@ -3382,8 +3383,8 @@ with tab6:
                     st.markdown(f"**Steps:** {steps}")
                     st.markdown(f"**Validation:** {validation_rules}")
                     st.caption(f"Triggers: {trigger_keywords}")
-                    with st.expander("Examples / Source", expanded=False):
-                        st.text(f"{examples or ''}\n\n{source_snapshot or ''}")
+                    st.caption("Examples / Source:")
+                    st.text(f"{examples or ''}\n\n{source_snapshot or ''}")
                     a_col, r_col = st.columns(2)
                     with a_col:
                         if st.button("Approve Skill", key=f"approve_skill_sug_{sug_id}"):
