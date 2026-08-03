@@ -12,6 +12,7 @@ import pandas as pd
 import re
 import os
 import json
+import shutil
 
 # Word Document Generation Imports
 from docx import Document
@@ -34,6 +35,16 @@ from github import Github
 # ==========================================
 # GitHub Cloud Sync Engine
 # ==========================================
+DB_SYNC_READY = bool(st.session_state.get("_db_sync_ready", False))
+DB_REMOTE_SHA = st.session_state.get("_db_remote_sha")
+
+def set_db_sync_state(ready, remote_sha=None):
+    global DB_SYNC_READY, DB_REMOTE_SHA
+    DB_SYNC_READY = bool(ready)
+    DB_REMOTE_SHA = remote_sha
+    st.session_state["_db_sync_ready"] = DB_SYNC_READY
+    st.session_state["_db_remote_sha"] = DB_REMOTE_SHA
+
 def get_secret_value(*names):
     for name in names:
         try:
@@ -60,6 +71,10 @@ def get_github_repo():
     token = get_secret_value("GITHUB_TOKEN")
     repo_name = get_secret_value("REPO_NAME") or "vkcvaibhav/Nodh-maker-"
     if not token:
+        queue_warning(
+            "GitHub database sync is disabled because GITHUB_TOKEN is missing from Streamlit secrets. "
+            "Remote writes are blocked to protect saved records."
+        )
         return None
     try:
         g = Github(token)
@@ -70,34 +85,78 @@ def get_github_repo():
 
 def pull_db_from_github():
     """Downloads the latest DB from GitHub when the app wakes up."""
+    set_db_sync_state(False)
     repo = get_github_repo()
-    if not repo: return
+    if not repo:
+        return False
+    temp_path = f"{DB_FILE}.download"
     try:
-        # Assuming we store it in a 'data' folder on GitHub
         file_content = repo.get_contents(f"data/{DB_FILE}")
-        with open(DB_FILE, "wb") as f:
+        with open(temp_path, "wb") as f:
             f.write(file_content.decoded_content)
+
+        # Validate the downloaded SQLite file before replacing the local copy.
+        conn = sqlite3.connect(temp_path)
+        quick_check = conn.execute("PRAGMA quick_check").fetchone()
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        conn.close()
+        if not quick_check or quick_check[0] != "ok" or "archive" not in tables:
+            raise RuntimeError("downloaded database failed validation")
+
+        os.replace(temp_path, DB_FILE)
+        set_db_sync_state(True, file_content.sha)
         print("Database successfully pulled from GitHub!")
+        return True
     except Exception as e:
-        queue_warning(f"GitHub DB pull skipped or failed: {e}")
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except OSError:
+            pass
+        queue_warning(
+            f"GitHub database download failed: {e}. Remote writes are blocked to prevent data loss."
+        )
+        return False
 
 def push_db_to_github():
     """Uploads the local DB to GitHub after any changes."""
+    if not DB_SYNC_READY:
+        queue_warning(
+            "Database save was not synchronized because startup sync did not complete. "
+            "The GitHub database was not changed."
+        )
+        return False
     repo = get_github_repo()
     if not repo:
         return False
     try:
         with open(DB_FILE, "rb") as f:
             content = f.read()
-        try:
-            # Update existing file
-            contents = repo.get_contents(f"data/{DB_FILE}")
-            repo.update_file(contents.path, f"Auto-backup DB {datetime.datetime.now()}", content, contents.sha)
-        except Exception:
-            # Create new file if it doesn't exist
-            repo.create_file(f"data/{DB_FILE}", "Initial DB backup", content)
+
+        contents = repo.get_contents(f"data/{DB_FILE}")
+        if DB_REMOTE_SHA and contents.sha != DB_REMOTE_SHA:
+            set_db_sync_state(False)
+            queue_warning(
+                "The database changed in another app session. This save was blocked to prevent older data "
+                "from overwriting newer records. Reload the app and try again."
+            )
+            return False
+
+        result = repo.update_file(
+            contents.path,
+            f"Auto-backup DB {datetime.datetime.now()}",
+            content,
+            contents.sha,
+        )
+        updated_content = result.get("content") if isinstance(result, dict) else None
+        if isinstance(updated_content, dict):
+            updated_sha = updated_content.get("sha")
+        else:
+            updated_sha = getattr(updated_content, "sha", None)
+        set_db_sync_state(True, updated_sha or contents.sha)
         return True
     except Exception as e:
+        set_db_sync_state(False)
         queue_warning(f"Failed to push DB to GitHub: {e}")
         return False
 
@@ -152,6 +211,27 @@ def load_vault_file_bytes(file_path):
 # Database Setup for Archiving, Workflow & Digital Vault
 # ==========================================
 DB_FILE = "sadar_nondh_archive.db"
+
+def load_bundled_db_fallback():
+    """Load the repository snapshot for read-only recovery when cloud sync is unavailable."""
+    bundled_path = os.path.join("data", DB_FILE)
+    if not os.path.exists(bundled_path):
+        return False
+    try:
+        shutil.copyfile(bundled_path, DB_FILE)
+        conn = sqlite3.connect(DB_FILE)
+        quick_check = conn.execute("PRAGMA quick_check").fetchone()
+        conn.close()
+        if not quick_check or quick_check[0] != "ok":
+            raise RuntimeError("bundled database failed validation")
+        queue_warning(
+            "GitHub sync is unavailable. Showing the last bundled database snapshot in read-only mode; "
+            "configure GITHUB_TOKEN in Streamlit secrets before saving new records."
+        )
+        return True
+    except Exception as e:
+        queue_warning(f"Could not load the bundled recovery database: {e}")
+        return False
 
 GUJARATI_DIGIT_TRANS = str.maketrans("૦૧૨૩૪૫૬૭૮૯", "0123456789")
 
@@ -1201,7 +1281,8 @@ def delete_vault_record(vault_id, nondh_id, file_path):
 
 # Check if we already pulled the DB in this session to avoid constant downloading
 if "db_synced" not in st.session_state:
-    pull_db_from_github()
+    if not pull_db_from_github():
+        load_bundled_db_fallback()
     st.session_state.db_synced = True
 
 init_db()
@@ -2636,7 +2717,9 @@ with tab1:
         st.markdown("---")
         col_save, col_down = st.columns(2)
         with col_save:
-            if st.button("આર્કાઇવમાં સેવ કરો (Save Nondh)"):
+            if not DB_SYNC_READY:
+                st.caption("Saving is disabled until GitHub database sync is connected.")
+            if st.button("આર્કાઇવમાં સેવ કરો (Save Nondh)", disabled=not DB_SYNC_READY):
                 subj = "No Subject"
                 for line in final_document.split('\n'):
                     if "વિષય:" in line:
