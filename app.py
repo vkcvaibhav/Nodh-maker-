@@ -1,4 +1,5 @@
 import streamlit as st
+import base64
 import google.generativeai as genai
 import sqlite3
 import datetime
@@ -29,6 +30,96 @@ from docx.oxml.ns import qn
 # Define global logo paths
 NAU_LOGO = "logos/nau_logo.png"
 ICAR_LOGO = "logos/icar_logo.png"
+GUJARATI_FONT = "fonts/SHREE0768.TTF"
+GUJARATI_FALLBACK_FONT = "fonts/NotoSansGujarati-Regular.ttf"
+GUJARATI_FONT_FAMILY = "Nondh SHREE Gujarati"
+GUJARATI_FALLBACK_FONT_FAMILY = "Nondh Noto Sans Gujarati"
+DOCX_GUJARATI_FONT_FAMILY = "SHREE_GUJ_OTF_0768"
+NONDH_PAGE_WIDTH_MM = 210
+NONDH_LEFT_BLANK_MM = 84
+NONDH_WRITING_WIDTH_MM = 126
+NONDH_RIGHT_SAFE_MARGIN_MM = 5
+NONDH_CONTENT_WIDTH_MM = 121
+
+
+@st.cache_data(show_spinner=False)
+def font_data_uri(font_path, modified_ns):
+    """Return a cached, embeddable font URL for Streamlit's browser UI."""
+    del modified_ns
+    with open(font_path, "rb") as font_file:
+        encoded_font = base64.b64encode(font_file.read()).decode("ascii")
+    return f"data:font/ttf;base64,{encoded_font}"
+
+
+def apply_app_typography():
+    """Use SHREE for Gujarati with local and platform fallbacks."""
+    font_faces = []
+    if os.path.exists(GUJARATI_FONT):
+        primary_uri = font_data_uri(GUJARATI_FONT, os.stat(GUJARATI_FONT).st_mtime_ns)
+        font_faces.append(f"""
+            @font-face {{
+                font-family: '{GUJARATI_FONT_FAMILY}';
+                src: url('{primary_uri}') format('truetype');
+                font-style: normal;
+                font-weight: 400;
+                font-display: swap;
+                unicode-range: U+0A80-0AFF;
+            }}
+        """)
+    if os.path.exists(GUJARATI_FALLBACK_FONT):
+        fallback_uri = font_data_uri(
+            GUJARATI_FALLBACK_FONT,
+            os.stat(GUJARATI_FALLBACK_FONT).st_mtime_ns,
+        )
+        font_faces.append(f"""
+            @font-face {{
+                font-family: '{GUJARATI_FALLBACK_FONT_FAMILY}';
+                src: url('{fallback_uri}') format('truetype');
+                font-style: normal;
+                font-weight: 400;
+                font-display: swap;
+                unicode-range: U+0A80-0AFF;
+            }}
+        """)
+
+    font_stack = (
+        f"'{GUJARATI_FONT_FAMILY}', '{GUJARATI_FALLBACK_FONT_FAMILY}', "
+        "'Source Sans', 'Nirmala UI', 'Shruti', Arial, sans-serif"
+    )
+    st.markdown(
+        f"""
+        <style>
+            {''.join(font_faces)}
+            :root {{ --nondh-gujarati-font-stack: {font_stack}; }}
+            .stApp,
+            .stApp button,
+            .stApp input,
+            .stApp textarea,
+            .stApp select,
+            .stApp [role="button"],
+            .stApp [role="tab"],
+            .stApp [data-baseweb] {{
+                font-family: var(--nondh-gujarati-font-stack) !important;
+            }}
+            .stApp code,
+            .stApp pre,
+            .stApp kbd {{
+                font-family: ui-monospace, SFMono-Regular, Consolas, monospace !important;
+            }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def apply_docx_gujarati_font(style):
+    """Keep Latin text in Times New Roman and Gujarati text in SHREE."""
+    style.font.name = "Times New Roman"
+    run_properties = style.element.get_or_add_rPr()
+    run_fonts = run_properties.get_or_add_rFonts()
+    for script in ("ascii", "hAnsi", "eastAsia"):
+        run_fonts.set(qn(f"w:{script}"), "Times New Roman")
+    run_fonts.set(qn("w:cs"), DOCX_GUJARATI_FONT_FAMILY)
 
 from github import Github
 
@@ -1426,24 +1517,37 @@ def add_bottom_border(paragraph, size='24'):
     pBdr.append(bottom)
     pPr.append(pBdr)
 
+
+def set_fixed_table_widths(table, widths):
+    """Keep the Word table grid and cells inside the 60% writing region."""
+    table.autofit = False
+    total_twips = sum(round(int(width) / 635) for width in widths)
+    table_width = table._tbl.tblPr.first_child_found_in("w:tblW")
+    if table_width is None:
+        table_width = OxmlElement("w:tblW")
+        table._tbl.tblPr.insert(0, table_width)
+    table_width.set(qn("w:type"), "dxa")
+    table_width.set(qn("w:w"), str(total_twips))
+
+    for column_index, width in enumerate(widths):
+        table.columns[column_index].width = width
+        for cell in table.columns[column_index].cells:
+            cell.width = width
+
 # ==========================================
 # Word Generators
 # ==========================================
 def create_docx(content):
     doc = Document()
     section = doc.sections[0]
-    section.page_width, section.page_height = Mm(210), Mm(297)
-    section.left_margin, section.right_margin = Mm(42), Mm(15)
+    section.page_width, section.page_height = Mm(NONDH_PAGE_WIDTH_MM), Mm(297)
+    section.left_margin = Mm(NONDH_LEFT_BLANK_MM)
+    section.right_margin = Mm(NONDH_RIGHT_SAFE_MARGIN_MM)
     section.top_margin, section.bottom_margin = Mm(15), Mm(15)
-    
-    font = doc.styles['Normal'].font
-    font.name = 'Times New Roman'
-    font.size = Pt(11)
-    rFonts = OxmlElement('w:rFonts')
-    rFonts.set(qn('w:ascii'), 'Times New Roman')
-    rFonts.set(qn('w:hAnsi'), 'Times New Roman')
-    rFonts.set(qn('w:cs'), 'Shruti')
-    font._element.append(rFonts)
+
+    normal_style = doc.styles['Normal']
+    apply_docx_gujarati_font(normal_style)
+    normal_style.font.size = Pt(11)
 
     lines = content.split('\n')
     table_data = []
@@ -1454,8 +1558,7 @@ def create_docx(content):
         if sig_buffer:
             doc.add_paragraph().paragraph_format.space_before = Pt(20)
             sig_table = doc.add_table(rows=1, cols=3)
-            for c in sig_table.columns: 
-                for cell in c.cells: cell.width = Mm(51)
+            set_fixed_table_widths(sig_table, [Mm(40), Mm(40), Mm(41)])
             for i, sig in enumerate(sig_buffer):
                 if i < 3:
                     p = sig_table.cell(0, i).paragraphs[0]
@@ -1471,12 +1574,10 @@ def create_docx(content):
         table = doc.add_table(rows=len(data), cols=num_cols)
         table.style = 'Table Grid'
         
-        # Turn off autofit to force Word to respect your explicit column widths
-        table.autofit = False 
-        
-        # Calculated to fit exactly within your page margins (153mm usable width)
-        # Sr. No (10mm) + Details (75mm) + Qty (17mm) + Avail (17mm) + Unit Price (17mm) + Total (17mm) = 153mm
-        widths = [Mm(10), Mm(75), Mm(17), Mm(17), Mm(17), Mm(17)]
+        # Stay within the rightmost 60% region, including its 5 mm safety inset.
+        widths = [Mm(8), Mm(55), Mm(14.5), Mm(14.5), Mm(14.5), Mm(14.5)]
+        if num_cols == 6:
+            set_fixed_table_widths(table, widths)
         
         for row_idx, row_data in enumerate(data):
             row_cells = table.rows[row_idx].cells
@@ -1484,7 +1585,7 @@ def create_docx(content):
                 cell = row_cells[col_idx]
                 
                 # Apply width to every cell individually to enforce it in MS Word
-                if num_cols == 6: 
+                if num_cols == 6:
                     cell.width = widths[col_idx]
                     
                 is_bold = (row_idx == 0) or ('**' in cell_text)
@@ -1541,7 +1642,7 @@ def create_docx(content):
                 flush_signatures()
                 doc.add_paragraph().paragraph_format.space_before = Pt(30)
                 p_table = doc.add_table(rows=1, cols=2)
-                p_table.columns[0].width, p_table.columns[1].width = Mm(79), Mm(74) 
+                set_fixed_table_widths(p_table, [Mm(60.5), Mm(60.5)])
                 formatted_line = "\n".join([p.strip() for p in line_stripped.split(",")])
                 p = p_table.cell(0, 1).paragraphs[0]
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -2308,6 +2409,7 @@ def create_bill_pasting_form(budget_head, grant_year, party_name, amount, amount
 # Streamlit App UI
 # ==========================================
 st.set_page_config(page_title="સાદર નોંધ જનરેટર", layout="wide")
+apply_app_typography()
 st.title("સાદર નોંધ જનરેટર (Intelligent Sadar Nondh App)")
 
 st.session_state["_ui_ready"] = True
@@ -2707,10 +2809,10 @@ with tab1:
         final_document = f"{edit_pre}\n\n{df_to_markdown_with_total(edited_df)}\n{edit_post}" if not edited_df.empty else f"{edit_pre}\n\n{edit_post}"
         
         st.markdown("---")
-        st.markdown("### દસ્તાવેજ પ્રીવ્યુ (Visual Preview - 20/80 Layout)")
-        
+        st.markdown("### દસ્તાવેજ પ્રીવ્યુ (Visual Preview - 40/60 Layout)")
+
         with st.container(border=True):
-            prev_blank, prev_content = st.columns([2, 8]) 
+            prev_blank, prev_content = st.columns([4, 6])
             with prev_content:
                 st.markdown(final_document)
         
