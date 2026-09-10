@@ -14,6 +14,9 @@ import re
 import os
 import json
 import shutil
+import uuid
+import zipfile
+import xml.etree.ElementTree as ET
 
 # Word Document Generation Imports
 from docx import Document
@@ -120,6 +123,122 @@ def apply_docx_gujarati_font(style):
     for script in ("ascii", "hAnsi", "eastAsia"):
         run_fonts.set(qn(f"w:{script}"), "Times New Roman")
     run_fonts.set(qn("w:cs"), DOCX_GUJARATI_FONT_FAMILY)
+
+
+def embed_docx_font(docx_bytes, font_path, font_family):
+    """Embed a TrueType font in a DOCX so it works without local installation."""
+    if not os.path.exists(font_path):
+        queue_warning(f"DOCX font embedding skipped because {font_path} is missing.")
+        return docx_bytes
+
+    word_ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    rel_ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    package_rel_ns = "http://schemas.openxmlformats.org/package/2006/relationships"
+    content_types_ns = "http://schemas.openxmlformats.org/package/2006/content-types"
+    def parse_xml(xml_bytes):
+        # Preserve prefixes referenced by mc:Ignorable; Word rejects dangling prefixes.
+        for _, (prefix, namespace_uri) in ET.iterparse(io.BytesIO(xml_bytes), events=("start-ns",)):
+            try:
+                ET.register_namespace(prefix, namespace_uri)
+            except ValueError:
+                pass
+        return ET.fromstring(xml_bytes)
+
+    font_key = uuid.uuid4()
+    key_bytes = bytes.fromhex(font_key.hex)[::-1]
+    with open(font_path, "rb") as font_file:
+        font_bytes = bytearray(font_file.read())
+    for index in range(min(32, len(font_bytes))):
+        font_bytes[index] ^= key_bytes[index % len(key_bytes)]
+
+    source = io.BytesIO(docx_bytes)
+    output = io.BytesIO()
+    font_part = "word/fonts/SHREE0768.odttf"
+    relationship_id = "rIdNondhShree0768"
+
+    with zipfile.ZipFile(source, "r") as source_zip:
+        font_table = parse_xml(source_zip.read("word/fontTable.xml"))
+        # python-docx declares w14 only for mc:Ignorable, without using w14 nodes.
+        # ElementTree omits that unused declaration, so remove the dangling hint.
+        font_table.attrib.pop(
+            "{http://schemas.openxmlformats.org/markup-compatibility/2006}Ignorable",
+            None,
+        )
+        existing_font = None
+        for font_node in font_table.findall(f"{{{word_ns}}}font"):
+            if font_node.get(f"{{{word_ns}}}name") == font_family:
+                existing_font = font_node
+                break
+        if existing_font is None:
+            existing_font = ET.SubElement(
+                font_table,
+                f"{{{word_ns}}}font",
+                {f"{{{word_ns}}}name": font_family},
+            )
+        for embed_node in list(existing_font.findall(f"{{{word_ns}}}embedRegular")):
+            existing_font.remove(embed_node)
+        ET.SubElement(
+            existing_font,
+            f"{{{word_ns}}}embedRegular",
+            {
+                f"{{{rel_ns}}}id": relationship_id,
+                f"{{{word_ns}}}fontKey": "{" + str(font_key).upper() + "}",
+            },
+        )
+
+        rels_path = "word/_rels/fontTable.xml.rels"
+        if rels_path in source_zip.namelist():
+            font_rels = parse_xml(source_zip.read(rels_path))
+        else:
+            font_rels = ET.Element(f"{{{package_rel_ns}}}Relationships")
+        for rel_node in list(font_rels.findall(f"{{{package_rel_ns}}}Relationship")):
+            if rel_node.get("Id") == relationship_id:
+                font_rels.remove(rel_node)
+        ET.SubElement(
+            font_rels,
+            f"{{{package_rel_ns}}}Relationship",
+            {
+                "Id": relationship_id,
+                "Type": "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font",
+                "Target": "fonts/SHREE0768.odttf",
+            },
+        )
+
+        content_types = parse_xml(source_zip.read("[Content_Types].xml"))
+        has_odttf_type = any(
+            node.get("Extension") == "odttf"
+            for node in content_types.findall(f"{{{content_types_ns}}}Default")
+        )
+        if not has_odttf_type:
+            ET.SubElement(
+                content_types,
+                f"{{{content_types_ns}}}Default",
+                {
+                    "Extension": "odttf",
+                    "ContentType": "application/vnd.openxmlformats-officedocument.obfuscatedFont",
+                },
+            )
+
+        settings = parse_xml(source_zip.read("word/settings.xml"))
+        if settings.find(f"{{{word_ns}}}embedTrueTypeFonts") is None:
+            settings.insert(0, ET.Element(f"{{{word_ns}}}embedTrueTypeFonts"))
+
+        replacements = {
+            "word/fontTable.xml": ET.tostring(font_table, encoding="utf-8", xml_declaration=True),
+            rels_path: ET.tostring(font_rels, encoding="utf-8", xml_declaration=True),
+            "[Content_Types].xml": ET.tostring(content_types, encoding="utf-8", xml_declaration=True),
+            "word/settings.xml": ET.tostring(settings, encoding="utf-8", xml_declaration=True),
+        }
+        with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as output_zip:
+            for item in source_zip.infolist():
+                if item.filename == font_part:
+                    continue
+                output_zip.writestr(item, replacements.pop(item.filename, source_zip.read(item.filename)))
+            for name, data in replacements.items():
+                output_zip.writestr(name, data)
+            output_zip.writestr(font_part, bytes(font_bytes))
+
+    return output.getvalue()
 
 from github import Github
 
@@ -1656,7 +1775,7 @@ def create_docx(content):
 
     bio = io.BytesIO()
     doc.save(bio)
-    return bio.getvalue()
+    return embed_docx_font(bio.getvalue(), GUJARATI_FONT, DOCX_GUJARATI_FONT_FAMILY)
 
 def create_purchase_order_docx(vendor_name, vendor_address, out_no, po_date, df_items):
     doc = Document()
